@@ -1,5 +1,7 @@
 const state = {
   screen: 'biblioteca',
+  detailKey: null,
+  detailBack: null,
   saveStatus: { state: 'idle', lastSavedAt: null, dirty: false },
   importStatus: null,
 };

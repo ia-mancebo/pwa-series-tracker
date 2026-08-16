@@ -1,6 +1,6 @@
 import { getState, setState, subscribe } from '../store.js';
 import { seriesState, movieState, episodeKey } from '../model.js';
-import { posterUrl } from '../search.js';
+import { posterUrl, normalizeName } from '../search.js';
 
 const STATE_LABEL = { paraver: 'Para ver', viendo: 'Viendo', visto: 'Visto' };
 const STATE_ORDER = { viendo: 0, paraver: 1, visto: 2 };
@@ -19,6 +19,7 @@ const STATE_CHIPS = [
 let active = null;
 let filterEstado = 'todo';
 let filterTipos = new Set();
+let filterTexto = '';
 
 function esc(text) {
   const div = document.createElement('div');
@@ -84,9 +85,21 @@ function buildRows() {
   return rows;
 }
 
+export function matchesText(row, query) {
+  const q = normalizeName(query);
+  if (!q) return true;
+  const entry = row.catalogEntry;
+  const hay = normalizeName(
+    [displayName(entry), altNames(entry), entry && entry.names ? entry.names.es : null, row.key].join(' ')
+  );
+  if (hay.includes(q)) return true;
+  return q.split(' ').every((token) => hay.includes(token));
+}
+
 function filterRows(rows) {
   return rows.filter((row) => {
     if (filterEstado !== 'todo' && row.state !== filterEstado) return false;
+    if (!matchesText(row, filterTexto)) return false;
     if (filterTipos.size === 0) return true;
     const entry = row.catalogEntry;
     const isSerie = !!entry && entry.type === 'series';
@@ -218,12 +231,15 @@ function renderBody() {
 }
 
 function openDetail(key) {
-  setState({ screen: 'detalle', detailKey: key });
+  setState({ screen: 'detalle', detailKey: key, detailBack: 'biblioteca' });
 }
 
 function shellHtml() {
   return `
     <div class="lib">
+      <div class="lib-search">
+        <input class="lib-search-input" type="search" placeholder="Buscar en tu biblioteca…" autocomplete="off" value="${esc(filterTexto)}" data-role="search">
+      </div>
       <div class="lib-seg" data-role="seg">
         ${STATE_CHIPS.map(
           ([value, label]) =>
@@ -250,6 +266,13 @@ function updateFilterButtons(root) {
 }
 
 function wireShell(root) {
+  const searchInput = root.querySelector('[data-role="search"]');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      filterTexto = searchInput.value;
+      renderBody();
+    });
+  }
   root.querySelector('[data-role="seg"]').addEventListener('click', (event) => {
     const button = event.target.closest('button[data-estado]');
     if (!button) return;

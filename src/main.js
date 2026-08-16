@@ -12,8 +12,6 @@ import { mount as mountBiblioteca } from './ui/biblioteca.js';
 import { mount as mountDetalle } from './ui/detalle.js';
 import { mount as mountNovedades } from './ui/novedades.js';
 import { mount as mountBuscar } from './ui/buscar.js';
-import { mount as mountImportar } from './ui/importar.js';
-import { mount as mountCola } from './ui/cola.js';
 import { mount as mountAjustes } from './ui/ajustes.js';
 import { mount as mountRecuperacion } from './ui/recuperacion.js';
 
@@ -22,8 +20,6 @@ const SCREENS = {
   detalle: { title: 'Detalle', mount: mountDetalle },
   novedades: { title: 'Novedades', mount: mountNovedades },
   buscar: { title: 'Buscar', mount: mountBuscar },
-  importar: { title: 'Importación', mount: mountImportar },
-  revision: { title: 'Revisión', mount: mountCola },
   ajustes: { title: 'Ajustes', mount: (root) => mountAjustes(root, { applyModeUI }) },
   recuperacion: { title: 'Recuperación', mount: (root) => mountRecuperacion(root, { openFlow, setSaveStatus }) },
 };

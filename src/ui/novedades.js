@@ -157,7 +157,7 @@ function renderBody() {
   if (episodes.length) {
     active.episodesEl.innerHTML = `<ul class="nov-list">${episodes.map(episodeRowHtml).join('')}</ul>`;
     active.episodesEl.querySelectorAll('.nov-ep').forEach((row) => {
-      const open = () => setState({ screen: 'detalle', detailKey: row.dataset.key });
+      const open = () => setState({ screen: 'detalle', detailKey: row.dataset.key, detailBack: 'novedades' });
       row.addEventListener('click', open);
       row.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {

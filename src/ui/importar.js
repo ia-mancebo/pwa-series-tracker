@@ -27,16 +27,17 @@ function renderStatus(root) {
 
 export function mount(root, deps = {}) {
   root.innerHTML = `
-    <section class="placeholder">
-      <h3 class="placeholder-title">Importar</h3>
-      <p class="placeholder-text">Importación única de los CSVs de TVTime, con emparejamiento contra TMDB y AniList y cola de revisión para los dudosos. Elige los ficheros:
+    <div class="imp">
+      <p class="aj-text">Importación única de los CSVs de TVTime, con emparejamiento contra TMDB y AniList y cola de revisión para los dudosos. Elige los ficheros:
         tracking-prod-records-v2.csv (series), tracking-prod-records.csv (películas),
         ratings-3-prod-episode_votes.csv y ratings-live-votes.csv (votos) y user_tv_show_data.csv (cross-check).</p>
-      <button type="button" class="file-btn" data-role="elegir">Elegir CSVs</button>
+      <div class="aj-keyrow">
+        <button type="button" class="aj-btn" data-role="elegir">Elegir CSVs</button>
+        <button type="button" class="aj-btn ghost" data-role="ir-revision" hidden>Ir a la cola de revisión</button>
+      </div>
       <input type="file" multiple hidden data-role="csv-input">
       <div class="mini" data-role="estado"></div>
-      <button type="button" class="file-btn" data-role="ir-revision" hidden>Ir a la cola de revisión</button>
-    </section>`;
+    </div>`;
 
   const chooseBtn = root.querySelector('[data-role="elegir"]');
   const input = root.querySelector('[data-role="csv-input"]');
@@ -45,6 +46,7 @@ export function mount(root, deps = {}) {
   activeRoot = root;
 
   const runImport = deps.runImport || importAll;
+  const goToRevision = deps.goToRevision || (() => {});
   const setStatus = (patch) => setState({ importStatus: { ...(getState().importStatus || {}), ...patch } });
 
   renderStatus(root);
@@ -53,6 +55,7 @@ export function mount(root, deps = {}) {
 
   input.addEventListener('change', async () => {
     const files = [...(input.files || [])];
+    input.value = '';
     if (!files.length) return;
     const state = getState();
     if (!state.data) {
@@ -90,9 +93,7 @@ export function mount(root, deps = {}) {
     }
   });
 
-  irRevision.addEventListener('click', () => {
-    setState({ screen: 'revision' });
-  });
+  irRevision.addEventListener('click', goToRevision);
 
   return root;
 }

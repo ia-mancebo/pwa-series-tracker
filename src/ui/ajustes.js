@@ -4,6 +4,8 @@ import * as tmdb from '../tmdb.js';
 import * as anilist from '../anilist.js';
 import { loadModePreference, storeModePreference, hasFsAccessSupport } from '../fs.js';
 import { resolveMode, readModePreference } from '../mode.js';
+import { mount as mountImportar } from './importar.js';
+import { mount as mountCola } from './cola.js';
 
 const APP_VERSION = '0.1.0';
 const APP_NAME = 'TVTime — fichero de emisión';
@@ -191,6 +193,14 @@ function render(root, state, deps = {}) {
         <div class="mini" data-role="refresh-status"></div>
       </section>
       <section class="aj-card">
+        <h3 class="aj-title">Importación</h3>
+        <div data-role="import"></div>
+      </section>
+      <section class="aj-card" data-role="revision-card">
+        <h3 class="aj-title">Cola de revisión</h3>
+        <div data-role="revision"></div>
+      </section>
+      <section class="aj-card">
         <h3 class="aj-title">Acerca de</h3>
         ${aboutHtml(state)}
       </section>
@@ -202,6 +212,17 @@ function render(root, state, deps = {}) {
   renderKeyArea(root.querySelector('[data-role="key"]'), state);
   wireRefreshArea(root);
   wireModeArea(root, deps);
+  const importHost = root.querySelector('[data-role="import"]');
+  if (importHost) {
+    mountImportar(importHost, {
+      goToRevision: () => {
+        const card = root.querySelector('[data-role="revision-card"]');
+        if (card && typeof card.scrollIntoView === 'function') card.scrollIntoView({ behavior: 'smooth' });
+      },
+    });
+  }
+  const revisionHost = root.querySelector('[data-role="revision"]');
+  if (revisionHost) mountCola(revisionHost);
 }
 
 function wireModeArea(root, deps = {}) {

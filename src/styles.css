@@ -451,6 +451,16 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .sr-follow.done { background: var(--signal); cursor: default; }
 
 .lib { display: flex; flex-direction: column; gap: 14px; height: 100%; }
+.lib-search { flex-shrink: 0; }
+.lib-search-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 14px;
+}
 .lib-seg {
   display: flex;
   background: #dbe4e9;
@@ -741,6 +751,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .cola { display: flex; flex-direction: column; gap: 14px; height: 100%; }
+.aj-card .cola { height: auto; }
+.aj-card .cola-body { max-height: 380px; overflow-y: auto; }
 .cola-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 3px; }
 .cola-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
 .cola-pending {

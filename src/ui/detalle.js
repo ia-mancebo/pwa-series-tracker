@@ -291,7 +291,7 @@ function wire(root) {
     if (!button) return;
     const action = button.dataset.action;
     if (action === 'back') {
-      setState({ screen: 'biblioteca' });
+      setState({ screen: getState().detailBack || 'biblioteca' });
     } else if (action === 'refresh') {
       const key = active.key;
       toast('Actualizando metadatos…');

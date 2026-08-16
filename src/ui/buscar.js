@@ -138,8 +138,7 @@ export function mount(root, { debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
           if (!state.data) throw new Error('no data');
           const next = addToLibrary(state.data, { ...detail, id: button.dataset.key });
           setState({ data: next });
-          button.textContent = 'Seguido ✓';
-          button.classList.add('done');
+          setState({ screen: 'detalle', detailKey: button.dataset.key, detailBack: 'buscar' });
         } catch {
           button.textContent = 'Vincula tu fichero primero (Ajustes / primera apertura)';
           button.disabled = false;
