@@ -461,6 +461,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   color: var(--ink);
   font-size: 14px;
 }
+.sr-input:focus-visible,
+.sr-go:focus-visible,
+.lib-search-input:focus-visible {
+  outline-offset: -3px;
+}
 .lib-seg {
   display: flex;
   background: #dbe4e9;
