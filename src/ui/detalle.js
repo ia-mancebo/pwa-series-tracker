@@ -10,6 +10,9 @@ import {
   movieState,
   rewatchCount,
   episodeKey,
+  isFollowed,
+  follow,
+  unfollow,
 } from '../model.js';
 import { posterUrl } from '../search.js';
 
@@ -192,6 +195,7 @@ function renderAll() {
   }
 
   const libraryEntry = (data.library && data.library[key]) || {};
+  const inLibrary = !!(data.library && data.library[key]);
   const now = new Date();
   const isMovie = catalogEntry.type === 'movie';
   const derived = isMovie ? movieState(libraryEntry) : seriesState(libraryEntry, catalogEntry, now);
@@ -211,6 +215,7 @@ function renderAll() {
       <div class="det-top">
         <button type="button" class="det-back" data-action="back">← Volver</button>
         <button type="button" class="det-btn det-btn--ghost" data-action="refresh">Actualizar metadatos</button>
+        ${inLibrary ? `<button type="button" class="det-btn det-btn--primary" data-action="toggle-follow">${isFollowed(libraryEntry) ? 'Dejar de seguir' : 'Seguir'}</button>` : ''}
       </div>
       <div class="det-grid">
         <div class="det-left">
@@ -310,6 +315,13 @@ function wire(root) {
       if (Number.isInteger(n)) mutate((data) => markSeasonWatched(data, active.key, n));
     } else if (action === 'toggle-movie') {
       mutate((data) => toggleMovieWatched(data, active.key));
+    } else if (action === 'toggle-follow') {
+      mutate((data) => {
+        const key = active.key;
+        const inLibrary = !!(data.library && data.library[key]);
+        const entry = data.library && data.library[key];
+        return inLibrary ? (isFollowed(entry) ? unfollow(data, key) : follow(data, data.catalog[key])) : data;
+      });
     }
   });
 

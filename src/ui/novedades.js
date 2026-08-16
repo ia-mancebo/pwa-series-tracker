@@ -1,5 +1,5 @@
 import { getState, setState, subscribe } from '../store.js';
-import { addToLibrary } from '../model.js';
+import { addToLibrary, follow, isFollowed, resolveFollowAction } from '../model.js';
 import { posterUrl } from '../search.js';
 import { createCache } from '../cache.js';
 import * as tmdb from '../tmdb.js';
@@ -92,7 +92,7 @@ function premiereRowHtml(premiere) {
     </li>`;
 }
 
-function detailHtml(premiere, detail) {
+function detailHtml(premiere, detail, followed) {
   const poster = posterUrl(detail.poster, 'w500');
   const names = detail.names || {};
   const alt = [...new Set([names.en, names.romaji, names.native].filter((n) => n && n !== displayName(detail)))].join(' · ');
@@ -113,7 +113,7 @@ function detailHtml(premiere, detail) {
           ${alt ? `<div class="nov-prem-alt">${esc(alt)}</div>` : ''}
           <div class="nov-prem-meta">${esc(meta)}</div>
           ${detail.synopsis ? `<p class="nov-synopsis">${esc(detail.synopsis)}</p>` : ''}
-          <button class="nov-follow" type="button" data-key="${esc(premiere.key)}">Seguir</button>
+          <button class="nov-follow" type="button" data-key="${esc(premiere.key)}">${followed ? 'Ver en Detalle' : 'Seguir'}</button>
         </div>
       </div>
     </section>`;
@@ -186,7 +186,8 @@ function renderBody() {
       if (!detail) active.premieresEl.innerHTML = noticeHtml('Cargando detalle…');
       else {
         const premiere = premieres.find((p) => p.key === active.premiereKey);
-        active.premieresEl.innerHTML = detailHtml(premiere, detail);
+        const library = data && data.library ? data.library : {};
+        active.premieresEl.innerHTML = detailHtml(premiere, detail, isFollowed(library[premiere.key]));
         active.premieresEl.querySelector('[data-action="detail-back"]').addEventListener('click', () => {
           active.premiereKey = null;
           renderBody();
@@ -235,12 +236,19 @@ function wireFollow() {
     const key = button.dataset.key;
     button.disabled = true;
     try {
-      const detail = details.get(key) || (await fetchDetail(key));
-      if (!detail) throw new Error('no detail');
       const state = getState();
       if (!state.data) throw new Error('no data');
-      const next = addToLibrary(state.data, { ...detail, id: key });
-      setState({ data: next });
+      const action = resolveFollowAction(state.data, key);
+      if (action !== 'navigate') {
+        const detail = details.get(key) || (await fetchDetail(key));
+        if (!detail) throw new Error('no detail');
+        const next =
+          action === 'refollow'
+            ? follow(state.data, { ...detail, id: key })
+            : addToLibrary(state.data, { ...detail, id: key });
+        setState({ data: next });
+      }
+      setState({ screen: 'detalle', detailKey: key, detailBack: 'novedades' });
     } catch {
       button.textContent = 'Vincula tu fichero primero (Ajustes / primera apertura)';
       button.disabled = false;

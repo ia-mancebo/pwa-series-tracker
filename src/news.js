@@ -1,14 +1,11 @@
 import { toResult } from './search.js';
+import { isFollowed } from './model.js';
 
 export const PREMIERE_WINDOW_DAYS = 30;
 export const PREMIERE_LIMIT = 50;
 
 function isDateString(value) {
   return typeof value === 'string' && value !== '' && !Number.isNaN(Date.parse(value));
-}
-
-export function isFollowed(libraryEntry) {
-  return !!libraryEntry && libraryEntry.followed !== false;
 }
 
 export function computeNewEpisodes(data, now = new Date()) {

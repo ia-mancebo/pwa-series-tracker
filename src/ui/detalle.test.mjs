@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyData, toggleEpisodeWatched } from '../model.js';
+import { emptyData, toggleEpisodeWatched, toggleMovieWatched } from '../model.js';
 
 class FakeElement {
   constructor() {
@@ -76,11 +76,32 @@ function seasonButton() {
   };
 }
 
-async function mountDetail(data) {
+function toggleFollowButton() {
+  return {
+    dataset: { action: 'toggle-follow' },
+    closest(selector) {
+      return selector === '.det-star' ? null : this;
+    },
+  };
+}
+
+function makeMovieData() {
+  const data = emptyData();
+  data.catalog[KEY] = {
+    id: KEY,
+    type: 'movie',
+    isAnime: false,
+    names: { es: 'Película de prueba', en: null, romaji: null, native: null },
+  };
+  data.library[KEY] = {};
+  return data;
+}
+
+async function mountDetail(data, key = KEY) {
   const { setState } = await import('../store.js');
   const { mount } = await import('./detalle.js');
   const root = new FakeElement();
-  setState({ data, detailKey: KEY, screen: 'detalle' });
+  setState({ data, detailKey: key, screen: 'detalle' });
   mount(root);
   return root;
 }
@@ -121,4 +142,82 @@ test('el checkbox no se marca cuando solo parte de los emitidos está vista', as
   const data = toggleEpisodeWatched(airedSeason(), KEY, '1x1', '2026-08-16T10:00:00Z');
   const root = await mountDetail(data);
   assert.deepEqual(seasonStateFrom(root), { pressed: 'false', chip: 'viendo' });
+});
+
+test('el Detalle de un título seguido muestra «Dejar de seguir» y al pulsarlo deja de seguirse conservando historial y pantalla', async () => {
+  const data = toggleEpisodeWatched(airedSeason(), KEY, '1x1', '2026-08-16T10:00:00Z');
+  data.library[KEY].note = 4;
+  const root = await mountDetail(data);
+  assert.ok(root.innerHTML.includes('data-action="toggle-follow"'));
+  assert.ok(root.innerHTML.includes('Dejar de seguir'));
+  assert.ok(!root.innerHTML.includes('Seguir'));
+
+  root.dispatch('click', { target: toggleFollowButton() });
+
+  const { getState } = await import('../store.js');
+  const state = getState();
+  assert.equal(state.data.library[KEY].followed, false);
+  assert.deepEqual(state.data.library[KEY].episodes['1x1'].watched, ['2026-08-16T10:00:00Z']);
+  assert.equal(state.data.library[KEY].note, 4);
+  assert.equal(root.isConnected, true);
+  assert.equal(state.screen, 'detalle');
+  assert.equal(state.detailKey, KEY);
+  assert.ok(root.innerHTML.includes('Seguir'));
+  assert.ok(!root.innerHTML.includes('Dejar de seguir'));
+});
+
+test('el Detalle de un título en biblioteca no seguido muestra «Seguir» y al pulsarlo se re-sigue conservando historial', async () => {
+  const data = toggleEpisodeWatched(airedSeason(), KEY, '1x2', '2026-08-16T10:00:00Z');
+  data.library[KEY].followed = false;
+  data.library[KEY].note = 3;
+  const root = await mountDetail(data);
+  assert.ok(root.innerHTML.includes('Seguir'));
+  assert.ok(!root.innerHTML.includes('Dejar de seguir'));
+
+  root.dispatch('click', { target: toggleFollowButton() });
+
+  const { getState } = await import('../store.js');
+  const state = getState();
+  assert.ok(!('followed' in state.data.library[KEY]));
+  assert.deepEqual(state.data.library[KEY].episodes['1x2'].watched, ['2026-08-16T10:00:00Z']);
+  assert.equal(state.data.library[KEY].note, 3);
+  assert.equal(root.isConnected, true);
+  assert.ok(root.innerHTML.includes('Dejar de seguir'));
+});
+
+test('el Detalle de una película seguida conserva historial al dejar de seguir y al re-seguir', async () => {
+  const data = toggleMovieWatched(makeMovieData(), KEY, '2026-08-16T10:00:00Z');
+  data.library[KEY].note = 5;
+  const root = await mountDetail(data);
+  assert.ok(root.innerHTML.includes('Dejar de seguir'));
+
+  root.dispatch('click', { target: toggleFollowButton() });
+  const { getState } = await import('../store.js');
+  let state = getState();
+  assert.equal(state.data.library[KEY].followed, false);
+  assert.deepEqual(state.data.library[KEY].watched, ['2026-08-16T10:00:00Z']);
+  assert.equal(state.data.library[KEY].note, 5);
+  assert.ok(root.innerHTML.includes('Seguir'));
+
+  root.dispatch('click', { target: toggleFollowButton() });
+  state = getState();
+  assert.ok(!('followed' in state.data.library[KEY]));
+  assert.deepEqual(state.data.library[KEY].watched, ['2026-08-16T10:00:00Z']);
+  assert.equal(state.data.library[KEY].note, 5);
+  assert.ok(root.innerHTML.includes('Dejar de seguir'));
+});
+
+test('el Detalle de un título fuera de la biblioteca no muestra el control de seguimiento', async () => {
+  const data = emptyData();
+  data.catalog[KEY] = {
+    id: KEY,
+    type: 'series',
+    isAnime: false,
+    names: { es: 'Serie de prueba', en: null, romaji: null, native: null },
+    seasons: [],
+  };
+  const root = await mountDetail(data);
+  assert.ok(!root.innerHTML.includes('toggle-follow'));
+  assert.ok(!root.innerHTML.includes('Seguir'));
+  assert.ok(!root.innerHTML.includes('Dejar de seguir'));
 });

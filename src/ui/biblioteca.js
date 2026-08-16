@@ -1,5 +1,5 @@
 import { getState, setState, subscribe } from '../store.js';
-import { seriesState, movieState, episodeKey } from '../model.js';
+import { seriesState, movieState, episodeKey, isFollowed } from '../model.js';
 import { posterUrl, normalizeName } from '../search.js';
 
 const STATE_LABEL = { paraver: 'Para ver', viendo: 'Viendo', visto: 'Visto' };
@@ -74,7 +74,7 @@ function buildRows() {
   const now = new Date();
   const rows = [];
   for (const [key, libraryEntry] of Object.entries((data && data.library) || {})) {
-    if (libraryEntry && libraryEntry.followed === false) continue;
+    if (!isFollowed(libraryEntry)) continue;
     const catalogEntry = (data.catalog || {})[key];
     const state =
       catalogEntry && catalogEntry.type === 'movie'

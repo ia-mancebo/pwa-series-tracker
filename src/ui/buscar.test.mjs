@@ -38,11 +38,13 @@ function buildRoot() {
   const go = new FakeElement('button');
   const body = new FakeElement('div');
   const root = new FakeElement('div');
+  const back = new FakeElement('button');
+  const follow = new FakeElement('button');
   root.querySelector = (sel) =>
     ({ '.sr-input': input, '.sr-go': go, '[data-role="body"]': body })[sel] || null;
-  body.querySelector = () => new FakeElement();
+  body.querySelector = (sel) => ({ '.sr-back': back, '.sr-follow': follow })[sel] || null;
   body.querySelectorAll = () => globalThis.__rows;
-  return { root, input, go, body };
+  return { root, input, go, body, back, follow };
 }
 
 function rowElement(key) {
@@ -95,6 +97,102 @@ function searchCount() {
 
 test.afterEach(() => {
   globalThis.fetch = globalThis.__originalFetch;
+});
+
+async function openSearchDetail(input, row) {
+  input.value = 'peli';
+  input.dispatch('input', {});
+  await sleep(60);
+  row.dispatch('click', {});
+  await sleep(10);
+}
+
+test('clic en «Seguir» de un título fuera de la biblioteca lo añade y navega a Detalle', async () => {
+  const { mount } = await import('./buscar.js');
+  const { root, input, body, follow } = buildRoot();
+  await setup();
+  globalThis.__rows = [rowElement('tmdb:movie:1')];
+  mount(root, { debounceMs: 30 });
+  await openSearchDetail(input, globalThis.__rows[0]);
+
+  assert.ok(body.innerHTML.includes('sr-detail'), 'el detalle debe estar abierto');
+  assert.ok(body.innerHTML.includes('Seguir'), 'la etiqueta debe ser «Seguir» sin estado previo');
+
+  follow.dataset.key = 'tmdb:movie:1';
+  follow.dispatch('click', { currentTarget: follow });
+  await sleep(20);
+
+  const { getState } = await import('../store.js');
+  const state = getState();
+  assert.equal(state.screen, 'detalle');
+  assert.equal(state.detailKey, 'tmdb:movie:1');
+  assert.equal(state.detailBack, 'buscar');
+  assert.ok(state.data.library['tmdb:movie:1'] !== undefined, 'se crea la entrada de biblioteca');
+  assert.ok(state.data.catalog['tmdb:movie:1'] !== undefined, 'se añaden los metadatos de catálogo');
+  assert.ok(!('followed' in state.data.library['tmdb:movie:1']), 'el título queda seguido');
+});
+
+test('título en biblioteca y seguido: el botón refleja el estado y navega sin duplicar', async () => {
+  const { mount } = await import('./buscar.js');
+  const { setState } = await import('../store.js');
+  const { root, input, body, follow } = buildRoot();
+  await setup();
+  setState({
+    data: {
+      settings: { tmdbApiKey: 'test-key' },
+      library: { 'tmdb:movie:1': { watched: ['2026-01-01T10:00:00Z'] } },
+    },
+  });
+  globalThis.__rows = [rowElement('tmdb:movie:1')];
+  mount(root, { debounceMs: 30 });
+  await openSearchDetail(input, globalThis.__rows[0]);
+
+  assert.ok(body.innerHTML.includes('Ver en Detalle'), 'la etiqueta debe reflejar que está seguido');
+  assert.ok(!body.innerHTML.includes('Seguir'), 'no debe ofrecer «Seguir»');
+
+  follow.dataset.key = 'tmdb:movie:1';
+  follow.dispatch('click', { currentTarget: follow });
+  await sleep(20);
+
+  const { getState } = await import('../store.js');
+  const state = getState();
+  assert.equal(state.screen, 'detalle');
+  assert.equal(state.detailKey, 'tmdb:movie:1');
+  assert.deepEqual(
+    state.data.library['tmdb:movie:1'],
+    { watched: ['2026-01-01T10:00:00Z'] },
+    'no debe mutar ni duplicar la entrada'
+  );
+});
+
+test('título en biblioteca y no seguido: «Seguir» lo re-sigue conservando historial y navega', async () => {
+  const { mount } = await import('./buscar.js');
+  const { setState } = await import('../store.js');
+  const { root, input, body, follow } = buildRoot();
+  await setup();
+  setState({
+    data: {
+      settings: { tmdbApiKey: 'test-key' },
+      library: { 'tmdb:movie:1': { followed: false, watched: ['2026-01-01T10:00:00Z'] } },
+    },
+  });
+  globalThis.__rows = [rowElement('tmdb:movie:1')];
+  mount(root, { debounceMs: 30 });
+  await openSearchDetail(input, globalThis.__rows[0]);
+
+  assert.ok(body.innerHTML.includes('Seguir'), 'no seguido → etiqueta «Seguir»');
+
+  follow.dataset.key = 'tmdb:movie:1';
+  follow.dispatch('click', { currentTarget: follow });
+  await sleep(20);
+
+  const { getState } = await import('../store.js');
+  const state = getState();
+  assert.equal(state.screen, 'detalle');
+  const entry = state.data.library['tmdb:movie:1'];
+  assert.ok(entry !== undefined, 'la entrada se conserva');
+  assert.ok(!('followed' in entry), 'el flag followed:false se limpia');
+  assert.deepEqual(entry.watched, ['2026-01-01T10:00:00Z'], 'el historial se conserva');
 });
 
 test('escribir seguido dispara una única búsqueda tras el debounce', async () => {

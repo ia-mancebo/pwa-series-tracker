@@ -19,7 +19,11 @@ import {
   setTitleNote,
   toggleMovieWatched,
   setFollowed,
+  isFollowed,
+  resolveFollowAction,
   addToLibrary,
+  follow,
+  unfollow,
   normalize,
   migrate,
   serialize,
@@ -328,6 +332,30 @@ test('setFollowed conserva el historial al dejar de seguir', () => {
   assert.deepEqual(next.library['tmdb:movie:27205'].watched, ['2025-03-14T22:00:00Z']);
 });
 
+test('isFollowed: seguido si no tiene followed: false', () => {
+  assert.equal(isFollowed(undefined), false);
+  assert.equal(isFollowed(null), false);
+  assert.equal(isFollowed({}), true);
+  assert.equal(isFollowed({ followed: false }), false);
+  assert.equal(isFollowed({ followed: true }), true);
+  assert.equal(isFollowed({ watched: ['2025-03-14T22:00:00Z'] }), true);
+});
+
+test('resolveFollowAction: título fuera de la biblioteca → add', () => {
+  assert.equal(resolveFollowAction({ library: {} }, KEY), 'add');
+  assert.equal(resolveFollowAction({}, KEY), 'add');
+  assert.equal(resolveFollowAction(null, KEY), 'add');
+});
+
+test('resolveFollowAction: título en biblioteca y seguido → navigate', () => {
+  assert.equal(resolveFollowAction({ library: { [KEY]: {} } }, KEY), 'navigate');
+  assert.equal(resolveFollowAction({ library: { [KEY]: { followed: true } } }, KEY), 'navigate');
+});
+
+test('resolveFollowAction: título en biblioteca y no seguido → refollow', () => {
+  assert.equal(resolveFollowAction({ library: { [KEY]: { followed: false } } }, KEY), 'refollow');
+});
+
 test('addToLibrary añade catálogo y entrada vacía (para ver)', () => {
   const data = emptyData();
   const entry = { id: KEY, type: 'series', isAnime: false, names: { es: 'Serie', en: 'Series' } };
@@ -357,6 +385,84 @@ test('addToLibrary no sobrescribe metadatos existentes y aplica opts sobre la en
 test('addToLibrary sin id lanza TypeError', () => {
   assert.throws(() => addToLibrary(emptyData(), { type: 'series' }), TypeError);
   assert.throws(() => addToLibrary(emptyData(), null), TypeError);
+});
+
+const SERIES_ENTRY = { id: KEY, type: 'series', isAnime: false, names: { es: 'Serie', en: 'Series' } };
+
+test('seguir un título no seguido lo re-sigue conservando historial y notas', () => {
+  let data = watchedSeries();
+  data = setTitleNote(data, KEY, 4);
+  data.library[KEY].origin = { source: 'tvtime', matchedName: 'Serie', importedAt: '2026-08-15T12:00:00Z', rawVotes: { '1x1': 5 } };
+  data = setFollowed(data, KEY, false);
+  assert.equal(isFollowed(data.library[KEY]), false);
+  const next = follow(data, SERIES_ENTRY);
+  assert.ok(!('followed' in next.library[KEY]));
+  assert.equal(isFollowed(next.library[KEY]), true);
+  assert.deepEqual(next.library[KEY].episodes['1x1'], { watched: ['2025-01-01T10:00:00Z'] });
+  assert.deepEqual(next.library[KEY].episodes['1x2'], { watched: ['2025-01-02T10:00:00Z'] });
+  assert.equal(next.library[KEY].note, 4);
+  assert.deepEqual(next.library[KEY].origin, data.library[KEY].origin);
+});
+
+test('seguir un título ausente lo añade a catálogo y biblioteca y queda seguido', () => {
+  const data = emptyData();
+  const before = data.meta.updatedAt;
+  const next = follow(data, SERIES_ENTRY);
+  assert.equal(next.catalog[KEY], SERIES_ENTRY);
+  assert.deepEqual(next.library[KEY], {});
+  assert.equal(isFollowed(next.library[KEY]), true);
+  assert.ok(next.meta.updatedAt >= before);
+  assert.ok(!Number.isNaN(Date.parse(next.meta.updatedAt)));
+  const again = follow(next, SERIES_ENTRY);
+  assert.equal(again.catalog[KEY], SERIES_ENTRY);
+  assert.deepEqual(again.library[KEY], {});
+});
+
+test('seguir un título ya seguido no altera la entrada', () => {
+  const data = watchedSeries();
+  const before = structuredClone(data.library[KEY]);
+  const next = follow(data, SERIES_ENTRY);
+  assert.deepEqual(next.library[KEY], before);
+  assert.ok(next.meta.updatedAt >= data.meta.updatedAt);
+});
+
+test('follow lanza TypeError sin id', () => {
+  assert.throws(() => follow(emptyData(), null), TypeError);
+  assert.throws(() => follow(emptyData(), {}), TypeError);
+  assert.throws(() => follow(emptyData(), { id: 123 }), TypeError);
+  assert.throws(() => follow(emptyData(), { id: '' }), TypeError);
+});
+
+test('dejar de seguir una serie conserva episodios, nota y origen y pone followed false', () => {
+  let data = watchedSeries();
+  data = setTitleNote(data, KEY, 4);
+  data.library[KEY].origin = { source: 'tvtime', matchedName: 'Serie', importedAt: '2026-08-15T12:00:00Z', rawVotes: { '1x1': 5 } };
+  const next = unfollow(data, KEY);
+  assert.equal(next.library[KEY].followed, false);
+  assert.equal(isFollowed(next.library[KEY]), false);
+  assert.deepEqual(next.library[KEY].episodes['1x1'], { watched: ['2025-01-01T10:00:00Z'] });
+  assert.deepEqual(next.library[KEY].episodes['1x2'], { watched: ['2025-01-02T10:00:00Z'] });
+  assert.equal(next.library[KEY].note, 4);
+  assert.deepEqual(next.library[KEY].origin, data.library[KEY].origin);
+});
+
+test('dejar de seguir una película conserva visionados y nota y pone followed false', () => {
+  const data = emptyData();
+  let next = toggleMovieWatched(data, 'tmdb:movie:1', '2025-03-14T22:00:00Z');
+  next = setTitleNote(next, 'tmdb:movie:1', 5);
+  const unf = unfollow(next, 'tmdb:movie:1');
+  assert.equal(unf.library['tmdb:movie:1'].followed, false);
+  assert.deepEqual(unf.library['tmdb:movie:1'].watched, ['2025-03-14T22:00:00Z']);
+  assert.equal(unf.library['tmdb:movie:1'].note, 5);
+});
+
+test('dejar de seguir un título ausente no crea entrada ni toca updatedAt', () => {
+  const data = emptyData();
+  const before = data.meta.updatedAt;
+  const next = unfollow(data, KEY);
+  assert.ok(!(KEY in next.library));
+  assert.equal(next.library[KEY], undefined);
+  assert.equal(next.meta.updatedAt, before);
 });
 
 test('toda mutación actualiza meta.updatedAt', () => {

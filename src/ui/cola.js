@@ -103,10 +103,12 @@ export function resolveIntoData(data, reviewItem, catalogEntry, opts = {}) {
   let next = addToLibrary(data, catalogEntry, {});
   const key = catalogEntry.id;
   const existing = next.library[key];
+  const merged = existing ? mergeLibraryEntry(existing, built) : built;
+  if (existing) delete merged.followed;
   next = {
     ...next,
     meta: { ...next.meta, updatedAt: now },
-    library: { ...next.library, [key]: existing ? mergeLibraryEntry(existing, built) : built },
+    library: { ...next.library, [key]: merged },
     review: (next.review || []).filter((item) => item.id !== reviewItem.id),
   };
   return next;

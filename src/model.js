@@ -193,6 +193,16 @@ export function toggleMovieWatched(data, key, timestampIso, watchedFlag) {
   }, now);
 }
 
+export function isFollowed(libraryEntry) {
+  return !!libraryEntry && libraryEntry.followed !== false;
+}
+
+export function resolveFollowAction(data, key) {
+  const entry = data && data.library ? data.library[key] : undefined;
+  if (!entry) return 'add';
+  return isFollowed(entry) ? 'navigate' : 'refollow';
+}
+
 export function setFollowed(data, key, followed) {
   const now = new Date();
   return withLibraryEntry(data, key, (raw) => {
@@ -233,6 +243,19 @@ export function addToLibrary(data, catalogEntry, opts = {}) {
     library[catalogEntry.id] = entry;
   }
   return { ...data, meta: { ...data.meta, updatedAt: now.toISOString() }, catalog, library };
+}
+
+export function follow(data, catalogEntry) {
+  if (!catalogEntry || typeof catalogEntry.id !== 'string' || catalogEntry.id === '') {
+    throw new TypeError('follow requiere catalogEntry.id');
+  }
+  return addToLibrary(data, catalogEntry, { followed: true });
+}
+
+export function unfollow(data, key) {
+  if (!data.library[key]) return data;
+  const now = new Date();
+  return withLibraryEntry(data, key, (raw) => ({ ...raw, followed: false }), now);
 }
 
 export function normalize(data) {

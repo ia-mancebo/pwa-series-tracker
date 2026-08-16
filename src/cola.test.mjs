@@ -302,6 +302,68 @@ test('ensureEntryId fija id para entradas solo-AniList y respeta las ya canónic
   assert.deepEqual(ensureEntryId({}), {});
 });
 
+test('resolver película no seguida: limpia followed:false y conserva visionado, nota y origin', async () => {
+  const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto', year: 2021 })] });
+  const review = movieReview({ raw: { year: 2021, episodes: {}, votes: {}, watched: [], vote: 27 } });
+  const data = emptyData();
+  data.review = [review];
+  data.catalog['tmdb:movie:3'] = tmdbMovie(3, { name: 'Encanto', year: 2021 });
+  data.library['tmdb:movie:3'] = {
+    watched: ['2023-01-01T10:00:00.000Z'],
+    note: 5,
+    origin: { source: 'tvtime', matchedName: 'Encanto', importedAt: '2026-08-01T00:00:00Z' },
+    followed: false,
+  };
+  const next = await resolveCandidate(data, review, review.candidates[1], { fetchers, now: NOW });
+  const entry = next.library['tmdb:movie:3'];
+  assert.equal(entry.followed, undefined, 're-sigue: sin clave followed');
+  assert.deepEqual(entry.watched, ['2023-01-01T10:00:00.000Z'], 'el visionado previo se conserva');
+  assert.equal(entry.note, 5, 'la nota previa se conserva');
+  assert.equal(entry.origin.importedAt, '2026-08-01T00:00:00Z', 'el origin previo se conserva');
+  assert.deepEqual(next.review, []);
+});
+
+test('resolver serie no seguida: fusiona episodios y limpia followed:false', async () => {
+  const fetchers = makeFetchers({ details: [tmdbSeries(30, { name: 'Half Show' })] });
+  const review = seriesReview({ candidates: [{ key: 'tmdb:tv:30', name: 'Half Show', year: 2020, poster: null }] });
+  const data = emptyData();
+  data.review = [review];
+  data.catalog['tmdb:tv:30'] = tmdbSeries(30, { name: 'Half Show' });
+  data.library['tmdb:tv:30'] = {
+    episodes: { '1x2': { watched: ['2026-01-02T10:00:00.000Z'] } },
+    note: 4,
+    origin: { source: 'tvtime', matchedName: 'Half Show', importedAt: '2026-08-01T00:00:00Z' },
+    followed: false,
+  };
+  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW });
+  const entry = next.library['tmdb:tv:30'];
+  assert.equal(entry.followed, undefined, 're-sigue: sin clave followed');
+  assert.deepEqual(Object.keys(entry.episodes).sort(), ['1x2', '1x5', '1x6']);
+  assert.deepEqual(entry.episodes['1x2'].watched, ['2026-01-02T10:00:00.000Z'], 'el episodio previo se conserva');
+  assert.deepEqual(entry.episodes['1x5'].watched, ['2026-06-27T09:43:50.000Z']);
+  assert.equal(entry.episodes['1x5'].note, 4);
+  assert.equal(entry.note, 4, 'la nota previa se conserva');
+  assert.equal(entry.origin.importedAt, '2026-08-01T00:00:00Z', 'el origin previo se conserva');
+  assert.deepEqual(next.review, []);
+});
+
+test('resolver sobre entrada ya seguida (sin clave followed) no altera el merge', async () => {
+  const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto', year: 2021 })] });
+  const data = emptyData();
+  data.review = [movieReview()];
+  data.catalog['tmdb:movie:3'] = tmdbMovie(3, { name: 'Encanto', year: 2021 });
+  data.library['tmdb:movie:3'] = {
+    watched: ['2023-01-01T10:00:00.000Z'],
+    note: 3,
+    origin: { source: 'tvtime', matchedName: 'Encanto', importedAt: '2026-08-01T00:00:00Z' },
+  };
+  const next = await resolveCandidate(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
+  const entry = next.library['tmdb:movie:3'];
+  assert.equal(entry.followed, undefined, 'sigue sin clave followed');
+  assert.equal(entry.note, 3);
+  assert.deepEqual(next.review, []);
+});
+
 test('resolveIntoData marca updatedAt con el now proporcionado', () => {
   const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto' })] });
   const data = emptyData();
