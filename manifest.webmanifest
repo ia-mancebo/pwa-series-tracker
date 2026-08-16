@@ -1,0 +1,31 @@
+{
+  "name": "TVTime — fichero de emisión",
+  "short_name": "TVTime",
+  "description": "Seguimiento personal de series, películas y animes. PWA estática, fichero único sincronizado por Dropbox.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e6edf1",
+  "theme_color": "#17263d",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

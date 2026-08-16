@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TVTime — fichero de emisión</title>
+<meta name="description" content="Seguimiento personal de series, películas y animes. PWA estática: sin cuenta, sin servidor, fichero único sincronizado por Dropbox.">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#17263d">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="app-header">
+    <span class="brand">
+      <span class="signal-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="brand-name">TVTime</span>
+    </span>
+    <span class="header-tools">
+      <span class="estado-ind"><span class="punto"></span><span data-save-status-text>Sin fichero vinculado</span></span>
+      <span class="manual-badge" data-manual-badge hidden>modo manual</span>
+      <button type="button" id="save-retry-btn" class="file-btn" hidden>Reintentar</button>
+      <button type="button" id="save-file-btn" class="file-btn" hidden>Guardar</button>
+    </span>
+  </header>
+
+  <div class="app-body">
+    <aside class="sidebar">
+      <div class="side-logo"><span class="signal-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>TVTIME</div>
+      <div class="side-navlabel">Secciones</div>
+      <nav class="side-nav">
+        <button type="button" class="navitem" data-screen="biblioteca">Biblioteca</button>
+        <button type="button" class="navitem" data-screen="novedades">Novedades</button>
+        <button type="button" class="navitem" data-screen="buscar">Buscar</button>
+        <button type="button" class="navitem" data-screen="importar">Importar</button>
+        <button type="button" class="navitem" data-screen="revision">Revisión</button>
+        <button type="button" class="navitem" data-screen="ajustes">Ajustes</button>
+      </nav>
+      <div class="side-footer"><b>● LOCAL</b><br>Dropbox · fichero único</div>
+    </aside>
+
+    <main class="app-main">
+      <div class="app-topbar">
+        <div class="topbar-heading">
+          <h2 id="screen-title">Biblioteca</h2>
+        </div>
+        <span class="estado-ind"><span class="punto"></span><span data-save-status-text>Sin fichero vinculado</span></span>
+        <button type="button" id="open-file-btn" class="file-btn">Abrir fichero</button>
+      </div>
+      <div class="screen-content" id="screen-content"></div>
+    </main>
+  </div>
+
+  <nav class="tabbar" aria-label="Navegación principal">
+    <button type="button" data-screen="biblioteca">Biblioteca</button>
+    <button type="button" data-screen="novedades">Novedades</button>
+    <button type="button" data-screen="buscar">Buscar</button>
+    <button type="button" data-screen="ajustes">Ajustes</button>
+  </nav>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
