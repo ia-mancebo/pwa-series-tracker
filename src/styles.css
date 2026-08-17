@@ -814,6 +814,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .cola-season-text { font-size: 13px; color: var(--ink); line-height: 1.5; margin: 8px 0 14px; }
 .cola-season-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 
+.picker { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(10, 16, 28, .45); }
+.picker-card { width: min(420px, 100%); max-height: 85vh; display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; box-shadow: 0 10px 30px rgba(10, 16, 28, .25); }
+.picker-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.picker-actions { display: flex; justify-content: flex-end; }
+
 .det { display: flex; flex-direction: column; gap: 14px; height: 100%; }
 .det-top {
   display: flex;

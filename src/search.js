@@ -55,6 +55,32 @@ export function posterUrl(poster, size = 'w342') {
   return poster.startsWith('/') ? `https://image.tmdb.org/t/p/${size}${poster}` : poster;
 }
 
+function esc(text) {
+  const div = document.createElement('div');
+  div.textContent = text == null ? '' : String(text);
+  return div.innerHTML;
+}
+
+export function resultRowHtml(result) {
+  const poster = posterUrl(result.poster);
+  const meta = [
+    result.year,
+    result.type === 'movie' ? 'película' : 'serie',
+    result.isAnime ? 'anime' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return `
+    <li class="sr-row" data-key="${esc(result.key)}">
+      <img class="sr-poster" src="${poster ? esc(poster) : ''}" alt="" loading="lazy">
+      <div class="sr-info">
+        <div class="sr-name">${esc(result.name)}</div>
+        ${result.altNames.length ? `<div class="sr-alt">${esc(result.altNames.join(' · '))}</div>` : ''}
+        <div class="sr-meta">${esc(meta)}</div>
+      </div>
+    </li>`;
+}
+
 export function mergeResults(tmdbResults, anilistResults, { degraded = false } = {}) {
   const anilistByNorm = new Map();
   for (const entry of anilistResults) {
