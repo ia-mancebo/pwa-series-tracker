@@ -2,6 +2,7 @@ import { episodeKey } from './model.js';
 import { normalizeName, namesMatch } from './search.js';
 import * as tmdb from './tmdb.js';
 import * as anilist from './anilist.js';
+import { fetchByKey } from './catalog.js';
 
 const SERIES_RECORDS_FILE = 'tracking-prod-records-v2.csv';
 const MOVIE_RECORDS_FILE = 'tracking-prod-records.csv';
@@ -699,11 +700,12 @@ async function safeDetail(entry, opts) {
 async function fetchDetail(entry, opts) {
   const key = entryKeyOf(entry);
   if (!key || !key.startsWith('tmdb:')) return entry;
-  if (!opts.tmdbApiKey) return null;
-  const id = key.split(':').pop();
-  return entry.type === 'series'
-    ? opts.fetchers.tmdb.getSeries(id, opts.tmdbApiKey)
-    : opts.fetchers.tmdb.getMovie(id, opts.tmdbApiKey);
+  return fetchByKey(key, {
+    tmdb: opts.fetchers.tmdb,
+    anilist: opts.fetchers.anilist,
+    tmdbApiKey: opts.tmdbApiKey,
+    ctx: opts.ctx,
+  });
 }
 
 async function safeCall(fn, opts) {

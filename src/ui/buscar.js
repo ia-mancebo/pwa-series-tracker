@@ -3,6 +3,7 @@ import { createCache } from '../cache.js';
 import { getState } from '../store.js';
 import { isFollowed } from '../model.js';
 import { followThenOpenDetail, followLabel } from './follow.js';
+import { fetchByKey } from '../catalog.js';
 
 export const SEARCH_DEBOUNCE_MS = 1000;
 
@@ -73,28 +74,10 @@ function noticeHtml(text, kind = '') {
 }
 
 async function fetchDetail(result) {
-  const entry = result.entry;
   const fromCache = await cache.get(result.key);
   if (fromCache) return fromCache;
-  const key = result.key;
-  let detail;
-  if (key.startsWith('tmdb:tv:')) {
-    const id = key.split(':').pop();
-    const { getSeries } = await import('../tmdb.js');
-    detail = await getSeries(id, apiKey());
-  } else if (key.startsWith('tmdb:movie:')) {
-    const id = key.split(':').pop();
-    const { getMovie } = await import('../tmdb.js');
-    detail = await getMovie(id, apiKey());
-  } else if (key.startsWith('anilist:')) {
-    const id = key.split(':').pop();
-    const { getById } = await import('../anilist.js');
-    detail = await getById(Number(id));
-  }
+  const detail = await fetchByKey(result.key, { tmdbApiKey: apiKey() });
   if (!detail) return null;
-  if (!detail.id && detail.anilistId != null) {
-    detail = { ...detail, id: `anilist:${detail.anilistId}` };
-  }
   await cache.set(result.key, detail);
   return detail;
 }

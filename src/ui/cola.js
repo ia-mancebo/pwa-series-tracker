@@ -2,6 +2,7 @@ import { getState, setState, subscribe } from '../store.js';
 import { follow } from '../model.js';
 import { posterUrl } from '../search.js';
 import { buildSeriesLibraryEntryFrom, voteToNote } from '../import.js';
+import { fetchByKey } from '../catalog.js';
 
 const TYPE_LABEL = { serie: 'Serie', pelicula: 'Película', temporada: 'Temporada' };
 const REASON_LABEL = {
@@ -95,25 +96,12 @@ export function ensureEntryId(entry) {
 export async function fetchCandidateDetail(candidate, opts = {}) {
   const key = candidate && candidate.key;
   if (!key) return null;
-  if (key.startsWith('tmdb:tv:')) {
-    const id = key.split(':').pop();
-    if (opts.fetchers) return opts.fetchers.tmdb.getSeries(id, opts.tmdbApiKey);
-    const { getSeries } = await import('../tmdb.js');
-    return getSeries(id, opts.tmdbApiKey);
-  }
-  if (key.startsWith('tmdb:movie:')) {
-    const id = key.split(':').pop();
-    if (opts.fetchers) return opts.fetchers.tmdb.getMovie(id, opts.tmdbApiKey);
-    const { getMovie } = await import('../tmdb.js');
-    return getMovie(id, opts.tmdbApiKey);
-  }
-  if (key.startsWith('anilist:')) {
-    const id = key.split(':').pop();
-    if (opts.fetchers) return opts.fetchers.anilist.getById(Number(id));
-    const { getById } = await import('../anilist.js');
-    return getById(Number(id));
-  }
-  return null;
+  const fetchers = opts.fetchers || {};
+  return fetchByKey(key, {
+    tmdb: fetchers.tmdb,
+    anilist: fetchers.anilist,
+    tmdbApiKey: opts.tmdbApiKey,
+  });
 }
 
 export function resolveIntoData(data, reviewItem, catalogEntry, opts = {}) {
