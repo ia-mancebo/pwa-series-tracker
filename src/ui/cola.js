@@ -1,6 +1,7 @@
 import { getState, setState, subscribe } from '../store.js';
 import { posterUrl } from '../search.js';
 import { resolvePick, resolveIntoData, discardFromReview, rawSeasonOf } from '../resolve.js';
+import { mountPicker } from './picker.js';
 
 const TYPE_LABEL = { serie: 'Serie', pelicula: 'Película', temporada: 'Temporada' };
 const REASON_LABEL = {
@@ -72,6 +73,7 @@ function pendingHtml(reviewItem) {
       </div>
       <ul class="cola-cands">${cards || '<li class="cola-nocands">Sin candidatos.</li>'}</ul>
       <div class="cola-actions">
+        <button type="button" class="aj-btn cola-manual">Buscar manualmente</button>
         <button type="button" class="aj-btn ghost cola-discard">Descartar</button>
       </div>
     </li>`;
@@ -109,14 +111,31 @@ function renderBody() {
       if (reviewItem) discard(reviewItem);
     });
   });
+  body.querySelectorAll('.cola-manual').forEach((button) => {
+    button.addEventListener('click', () => {
+      const pending = button.closest('.cola-pending');
+      const reviewItem = review.find((item) => item.id === pending.dataset.id);
+      if (reviewItem) openManual(reviewItem, button);
+    });
+  });
 }
 
 function setBusy(next) {
   busy = next;
   const root = active && active.root;
   if (!root) return;
-  root.querySelectorAll('.cola-choose, .cola-discard').forEach((button) => {
+  root.querySelectorAll('.cola-choose, .cola-discard, .cola-manual').forEach((button) => {
     button.disabled = next;
+  });
+}
+
+function openManual(reviewItem, button) {
+  if (!active || !active.root || busy) return;
+  mountPicker(active.root, {
+    type: reviewItem.type,
+    onPick: (result) => {
+      choose(reviewItem, result, button);
+    },
   });
 }
 
