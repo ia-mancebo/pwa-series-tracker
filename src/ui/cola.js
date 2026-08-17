@@ -1,8 +1,6 @@
 import { getState, setState, subscribe } from '../store.js';
-import { follow } from '../model.js';
 import { posterUrl } from '../search.js';
-import { buildSeriesLibraryEntryFrom, voteToNote } from '../import.js';
-import { fetchByKey } from '../catalog.js';
+import { resolvePick, resolveIntoData, discardFromReview, rawSeasonOf } from '../resolve.js';
 
 const TYPE_LABEL = { serie: 'Serie', pelicula: 'Película', temporada: 'Temporada' };
 const REASON_LABEL = {
@@ -26,121 +24,6 @@ function esc(text) {
 function apiKey() {
   const data = getState().data;
   return data && data.settings && data.settings.tmdbApiKey ? data.settings.tmdbApiKey : null;
-}
-
-function rawSeasonOf(reviewItem) {
-  if (reviewItem && reviewItem.type === 'temporada' && reviewItem.raw && reviewItem.raw.season != null) {
-    return Number(reviewItem.raw.season);
-  }
-  return null;
-}
-
-function remapSxe(sxe, season) {
-  return `${season}x${String(sxe).split('x')[1]}`;
-}
-
-export function buildLibraryEntry(reviewItem, now, opts = {}) {
-  const raw = reviewItem.raw || {};
-  const origin = { source: 'tvtime', matchedName: reviewItem.tvtimeName, importedAt: now };
-  if (raw.vote != null) origin.rawVote = raw.vote;
-
-  const season = reviewItem.type === 'temporada' && opts.season != null ? Number(opts.season) : null;
-  const remap = season == null ? (sxe) => sxe : (sxe) => remapSxe(sxe, season);
-  const episodes = {};
-  const votes = {};
-  for (const [sxe, value] of Object.entries(raw.episodes || {})) episodes[remap(sxe)] = value;
-  for (const [sxe, value] of Object.entries(raw.votes || {})) votes[remap(sxe)] = value;
-  const sxeList = Object.keys(episodes);
-  if (sxeList.length) {
-    return buildSeriesLibraryEntryFrom(episodes, votes, sxeList, origin);
-  }
-  const entry = { origin };
-  const watched = raw.watched || [];
-  if (Array.isArray(watched) && watched.length) entry.watched = [...watched];
-  if (raw.vote != null) {
-    const note = voteToNote(raw.vote);
-    if (note != null) entry.note = note;
-  }
-  return entry;
-}
-
-function mergeLibraryEntry(existing, incoming) {
-  const base = { ...existing };
-  const epA = existing.episodes && typeof existing.episodes === 'object' && !Array.isArray(existing.episodes) ? existing.episodes : {};
-  const epB = incoming.episodes || {};
-  if (Object.keys(epB).length) {
-    const episodes = { ...epA };
-    for (const [sxe, ep] of Object.entries(epB)) {
-      const current = episodes[sxe] || {};
-      const watched = [...(current.watched || []), ...(ep.watched || [])];
-      const merged = { ...current, ...ep, watched: [...new Set(watched)] };
-      if (current.note !== undefined) merged.note = current.note;
-      episodes[sxe] = merged;
-    }
-    base.episodes = episodes;
-  }
-  if (incoming.watched && incoming.watched.length) {
-    base.watched = [...new Set([...(existing.watched || []), ...incoming.watched])];
-  }
-  if (base.note === undefined && incoming.note !== undefined) base.note = incoming.note;
-  if (!base.origin && incoming.origin) base.origin = incoming.origin;
-  return base;
-}
-
-export function ensureEntryId(entry) {
-  if (entry && typeof entry.id === 'string' && entry.id) return entry;
-  if (entry && entry.anilistId != null) return { ...entry, id: `anilist:${entry.anilistId}` };
-  return entry;
-}
-
-export async function fetchCandidateDetail(candidate, opts = {}) {
-  const key = candidate && candidate.key;
-  if (!key) return null;
-  const fetchers = opts.fetchers || {};
-  return fetchByKey(key, {
-    tmdb: fetchers.tmdb,
-    anilist: fetchers.anilist,
-    tmdbApiKey: opts.tmdbApiKey,
-  });
-}
-
-export function resolveIntoData(data, reviewItem, catalogEntry, opts = {}) {
-  const now = opts.now || new Date().toISOString();
-  const built = buildLibraryEntry(reviewItem, now, opts);
-  let next = follow(data, catalogEntry);
-  const key = catalogEntry.id;
-  const existing = next.library[key];
-  const merged = existing ? mergeLibraryEntry(existing, built) : built;
-  next = {
-    ...next,
-    meta: { ...next.meta, updatedAt: now },
-    library: { ...next.library, [key]: merged },
-    review: (next.review || []).filter((item) => item.id !== reviewItem.id),
-  };
-  return next;
-}
-
-export async function resolveCandidate(data, reviewItem, candidate, opts = {}) {
-  let detail;
-  try {
-    detail = await fetchCandidateDetail(candidate, opts);
-  } catch {
-    detail = null;
-  }
-  if (!detail) return null;
-  const entry = ensureEntryId(detail);
-  if (typeof opts.onEntry === 'function') {
-    const intercepted = opts.onEntry(entry);
-    if (intercepted) return data;
-  }
-  return resolveIntoData(data, reviewItem, entry, { now: opts.now, season: opts.season });
-}
-
-export function discardFromReview(data, reviewId, opts = {}) {
-  const review = (data.review || []).filter((item) => item.id !== reviewId);
-  if (review.length === (data.review || []).length) return data;
-  const now = opts.now || new Date().toISOString();
-  return { ...data, meta: { ...data.meta, updatedAt: now }, review };
 }
 
 function episodeCountLabel(count) {
@@ -237,20 +120,20 @@ function setBusy(next) {
   });
 }
 
-async function choose(reviewItem, candidate, button) {
+async function choose(reviewItem, pick, button) {
   const data = getState().data;
   if (!data || busy) return;
   const label = button.textContent;
   setBusy(true);
   button.textContent = 'Cargando…';
   try {
-    const next = await resolveCandidate(data, reviewItem, candidate, {
+    const next = await resolvePick(data, reviewItem, pick, {
       tmdbApiKey: apiKey(),
       now: new Date().toISOString(),
-      onEntry: (entry) => {
+      onEntry: (entry, pickForPicker) => {
         const info = seasonPickerInfo(reviewItem, entry);
         if (!info) return false;
-        showSeasonPicker(reviewItem, candidate, entry, info, button);
+        showSeasonPicker(reviewItem, pickForPicker, entry, info, button);
         return true;
       },
     });
@@ -287,7 +170,7 @@ function seasonPickerInfo(reviewItem, entry) {
   return { rawSeason, catalogSeasons };
 }
 
-function showSeasonPicker(reviewItem, candidate, catalogEntry, info, restoreFocus) {
+function showSeasonPicker(reviewItem, pick, catalogEntry, info, restoreFocus) {
   const root = active && active.root;
   if (!root) return;
   const previous = root.querySelector('.cola-season-picker');
@@ -301,7 +184,7 @@ function showSeasonPicker(reviewItem, candidate, catalogEntry, info, restoreFocu
   picker.innerHTML = `
     <div class="cola-season-card">
       <h4 class="cola-name">${esc(reviewItem.tvtimeName)}</h4>
-      <p class="cola-season-text">La temporada ${esc(String(rawSeason))} de TVTime (${episodeCountLabel(episodeCount)}) no existe en «${esc(candidate.name || candidate.key)}». ¿A qué temporada del catálogo corresponde?</p>
+      <p class="cola-season-text">La temporada ${esc(String(rawSeason))} de TVTime (${episodeCountLabel(episodeCount)}) no existe en «${esc(pick.name || pick.key)}». ¿A qué temporada del catálogo corresponde?</p>
       <div class="cola-season-opts">
         ${catalogSeasons.map((n) => `<button type="button" class="aj-btn cola-season-opt" data-season="${n}">Temporada ${n}</button>`).join('')}
       </div>

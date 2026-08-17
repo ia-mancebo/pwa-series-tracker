@@ -6,9 +6,9 @@ import {
   discardFromReview,
   ensureEntryId,
   fetchCandidateDetail,
-  resolveCandidate,
+  resolvePick,
   resolveIntoData,
-} from './ui/cola.js';
+} from './resolve.js';
 
 const NOW = '2026-08-15T12:00:00Z';
 
@@ -149,7 +149,7 @@ test('elegir candidato de película: catálogo + visionados + nota + origin, pen
   const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto', year: 2021 })] });
   const data = emptyData();
   data.review = [movieReview()];
-  const next = await resolveCandidate(data, data.review[0], data.review[0].candidates[1], {
+  const next = await resolvePick(data, data.review[0], data.review[0].candidates[1], {
     tmdbApiKey: 'fake-key',
     fetchers,
     now: NOW,
@@ -172,7 +172,7 @@ test('candidato AniList: se fija id canónico anilist:{id}', async () => {
   review.raw = { year: 2001, episodes: {}, votes: {}, watched: [], vote: null };
   const data = emptyData();
   data.review = [review];
-  const next = await resolveCandidate(data, review, review.candidates[0], {
+  const next = await resolvePick(data, review, review.candidates[0], {
     fetchers,
     now: NOW,
   });
@@ -187,7 +187,7 @@ test('serie: episodios SxE con visionados, notas según escala TVTime, rawVotes 
   const review = seriesReview({ candidates: [{ key: 'tmdb:tv:30', name: 'Half Show', year: 2020, poster: null }] });
   const data = emptyData();
   data.review = [review];
-  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW });
+  const next = await resolvePick(data, review, review.candidates[0], { fetchers, now: NOW });
   const entry = next.library['tmdb:tv:30'];
   assert.deepEqual(entry.episodes['1x5'].watched, ['2026-06-27T09:43:50.000Z']);
   assert.equal(entry.episodes['1x5'].note, 4);
@@ -218,7 +218,7 @@ test('temporada: solo esa temporada entra, fusionando con una entrada previa', a
     note: 4,
     origin: { source: 'tvtime', matchedName: 'The Amazing World of Gumball', importedAt: '2026-08-01T00:00:00Z' },
   };
-  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW });
+  const next = await resolvePick(data, review, review.candidates[0], { fetchers, now: NOW });
   const entry = next.library['tmdb:tv:40'];
   assert.deepEqual(Object.keys(entry.episodes).sort(), ['7x1', '7x2']);
   assert.deepEqual(entry.episodes['7x1'].watched, ['2026-01-01T10:00:00.000Z']);
@@ -243,7 +243,7 @@ test('temporada con remapeo: las claves SxE se re-numeran a la temporada elegida
   });
   const data = emptyData();
   data.review = [review];
-  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
+  const next = await resolvePick(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
   const entry = next.library['tmdb:tv:40'];
   assert.deepEqual(Object.keys(entry.episodes).sort(), ['1x1', '1x22']);
   assert.deepEqual(entry.episodes['1x1'].watched, ['2026-01-09T13:46:47.000Z']);
@@ -271,7 +271,7 @@ test('US10: al fusionar un remapeo que colisiona, la nota de episodio previa se 
     episodes: { '1x1': { watched: ['2026-01-02T10:00:00.000Z'], note: 3 } },
     origin: { source: 'tvtime', matchedName: 'The Amazing World of Gumball', importedAt: '2026-08-01T00:00:00Z' },
   };
-  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
+  const next = await resolvePick(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
   const entry = next.library['tmdb:tv:40'];
   assert.equal(entry.episodes['1x1'].note, 3, 'la nota previa del episodio se conserva');
   assert.deepEqual(
@@ -289,7 +289,7 @@ test('US12: tras resolver una temporada con remapeo, el fichero de datos sigue v
   const review = seasonReview();
   const data = emptyData();
   data.review = [review];
-  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
+  const next = await resolvePick(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
   assert.equal(validate(next).ok, true);
   assert.deepEqual(Object.keys(next.library['tmdb:tv:40'].episodes), ['1x1']);
   assert.deepEqual(next.review, []);
@@ -321,7 +321,7 @@ test('entrada de catálogo ya existente no se sobrescribe al resolver', async ()
   data.review = [movieReview()];
   data.catalog['tmdb:movie:3'] = tmdbMovie(3, { name: 'Encanto', year: 2021 });
   data.catalog['tmdb:movie:3'].synopsis = 'ya presente';
-  const next = await resolveCandidate(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
+  const next = await resolvePick(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
   assert.equal(next.catalog['tmdb:movie:3'].synopsis, 'ya presente');
   assert.equal(next.catalog['tmdb:movie:3'].poster, null);
 });
@@ -350,23 +350,23 @@ test('fetchCandidateDetail despacha por prefijo de clave', async () => {
   assert.equal(await fetchCandidateDetail(null, { fetchers }), null);
 });
 
-test('detalle no disponible → resolveCandidate devuelve null y no toca los datos', async () => {
+test('detalle no disponible → resolvePick devuelve null y no toca los datos', async () => {
   const fetchers = makeFetchers({ details: [] });
   fetchers.failOn('tmdb:movie:3');
   const data = emptyData();
   data.review = [movieReview()];
-  const next = await resolveCandidate(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
+  const next = await resolvePick(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
   assert.equal(next, null);
   assert.deepEqual(data.review.length, 1);
 });
 
-test('resolveCandidate: onEntry que devuelve true intercepta y no resuelve', async () => {
+test('resolvePick: onEntry que devuelve true intercepta y no resuelve', async () => {
   const fetchers = makeFetchers({ details: [tmdbSeries(30, { name: 'Half Show' })] });
   const review = seriesReview({ candidates: [{ key: 'tmdb:tv:30', name: 'Half Show', year: 2020, poster: null }] });
   const data = emptyData();
   data.review = [review];
   const seen = [];
-  const next = await resolveCandidate(data, review, review.candidates[0], {
+  const next = await resolvePick(data, review, review.candidates[0], {
     fetchers,
     now: NOW,
     onEntry: (entry) => {
@@ -381,12 +381,12 @@ test('resolveCandidate: onEntry que devuelve true intercepta y no resuelve', asy
   assert.deepEqual(Object.keys(data.library), [], 'no se crea entrada de biblioteca');
 });
 
-test('resolveCandidate: onEntry que devuelve false deja resolver con normalidad', async () => {
+test('resolvePick: onEntry que devuelve false deja resolver con normalidad', async () => {
   const fetchers = makeFetchers({ details: [tmdbSeries(30, { name: 'Half Show' })] });
   const review = seriesReview({ candidates: [{ key: 'tmdb:tv:30', name: 'Half Show', year: 2020, poster: null }] });
   const data = emptyData();
   data.review = [review];
-  const next = await resolveCandidate(data, review, review.candidates[0], {
+  const next = await resolvePick(data, review, review.candidates[0], {
     fetchers,
     now: NOW,
     onEntry: () => false,
@@ -448,7 +448,7 @@ test('resolver película no seguida: limpia followed:false y conserva visionado,
     origin: { source: 'tvtime', matchedName: 'Encanto', importedAt: '2026-08-01T00:00:00Z' },
     followed: false,
   };
-  const next = await resolveCandidate(data, review, review.candidates[1], { fetchers, now: NOW });
+  const next = await resolvePick(data, review, review.candidates[1], { fetchers, now: NOW });
   const entry = next.library['tmdb:movie:3'];
   assert.equal(entry.followed, undefined, 're-sigue: sin clave followed');
   assert.deepEqual(entry.watched, ['2023-01-01T10:00:00.000Z'], 'el visionado previo se conserva');
@@ -469,7 +469,7 @@ test('resolver serie no seguida: fusiona episodios y limpia followed:false', asy
     origin: { source: 'tvtime', matchedName: 'Half Show', importedAt: '2026-08-01T00:00:00Z' },
     followed: false,
   };
-  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW });
+  const next = await resolvePick(data, review, review.candidates[0], { fetchers, now: NOW });
   const entry = next.library['tmdb:tv:30'];
   assert.equal(entry.followed, undefined, 're-sigue: sin clave followed');
   assert.deepEqual(Object.keys(entry.episodes).sort(), ['1x2', '1x5', '1x6']);
@@ -491,7 +491,7 @@ test('resolver sobre entrada ya seguida (sin clave followed) no altera el merge'
     note: 3,
     origin: { source: 'tvtime', matchedName: 'Encanto', importedAt: '2026-08-01T00:00:00Z' },
   };
-  const next = await resolveCandidate(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
+  const next = await resolvePick(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
   const entry = next.library['tmdb:movie:3'];
   assert.equal(entry.followed, undefined, 'sigue sin clave followed');
   assert.equal(entry.note, 3);
@@ -502,8 +502,87 @@ test('resolveIntoData marca updatedAt con el now proporcionado', () => {
   const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto' })] });
   const data = emptyData();
   data.review = [movieReview()];
-  return resolveCandidate(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW }).then((next) => {
+  return resolvePick(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW }).then((next) => {
     assert.equal(next.meta.updatedAt, NOW);
     assert.ok(next.meta.version === 1);
   });
+});
+
+test('pick de búsqueda manual de película resuelve igual que un candidato', async () => {
+  const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto', year: 2021 })] });
+  const data = emptyData();
+  data.review = [movieReview()];
+  const next = await resolvePick(data, data.review[0], { key: 'tmdb:movie:3' }, {
+    tmdbApiKey: 'fake-key',
+    fetchers,
+    now: NOW,
+  });
+  assert.ok(next.catalog['tmdb:movie:3']);
+  const entry = next.library['tmdb:movie:3'];
+  assert.deepEqual(entry.watched, ['2024-12-31T17:43:10.000Z']);
+  assert.equal(entry.note, 2);
+  assert.equal(entry.origin.source, 'tvtime');
+  assert.equal(entry.origin.matchedName, 'Encanto');
+  assert.equal(entry.origin.rawVote, 27);
+  assert.equal(entry.origin.importedAt, NOW);
+  assert.deepEqual(next.review, []);
+});
+
+test('pendiente sin candidatos resuelto por búsqueda manual', async () => {
+  const fetchers = makeFetchers({ details: [tmdbSeries(30, { name: 'Half Show' })] });
+  const review = seriesReview();
+  const data = emptyData();
+  data.review = [review];
+  const next = await resolvePick(data, review, { key: 'tmdb:tv:30' }, { fetchers, now: NOW });
+  const entry = next.library['tmdb:tv:30'];
+  assert.deepEqual(entry.episodes['1x5'].watched, ['2026-06-27T09:43:50.000Z']);
+  assert.equal(entry.episodes['1x5'].note, 4);
+  assert.equal(entry.episodes['1x6'].note, 5);
+  assert.deepEqual(entry.origin.rawVotes, { '1x5': 29, '1x6': 3 });
+  assert.deepEqual(next.review, []);
+});
+
+test('remapeo de temporada disparado por un pick manual', async () => {
+  const fetchers = makeFetchers({
+    details: [tmdbSeries(40, { name: 'Gumball 2025', seasons: [{ n: 1, episodes: [] }, { n: 2, episodes: [] }] })],
+  });
+  const data = emptyData();
+  data.review = [seasonReview()];
+  const next = await resolvePick(data, data.review[0], { key: 'tmdb:tv:40' }, { fetchers, now: NOW, season: 1 });
+  const entry = next.library['tmdb:tv:40'];
+  assert.deepEqual(Object.keys(entry.episodes), ['1x1']);
+  assert.deepEqual(entry.episodes['1x1'].watched, ['2026-01-09T13:46:47.000Z']);
+  assert.equal(entry.episodes['1x1'].note, 5);
+  assert.deepEqual(entry.origin.rawVotes, { '1x1': 3 });
+  assert.deepEqual(next.review, []);
+});
+
+test('fallo de detalle con pick manual → null sin tocar los datos', async () => {
+  const fetchers = makeFetchers({ details: [] });
+  fetchers.failOn('tmdb:movie:3');
+  const data = emptyData();
+  data.review = [movieReview()];
+  const next = await resolvePick(data, data.review[0], { key: 'tmdb:movie:3' }, { fetchers, now: NOW });
+  assert.equal(next, null);
+  assert.equal(data.review.length, 1);
+});
+
+test('onEntry recibe el pick (candidato o manual)', async () => {
+  const fetchers = makeFetchers({ details: [tmdbSeries(30, { name: 'Half Show' })] });
+  const review = seriesReview();
+  const data = emptyData();
+  data.review = [review];
+  const pick = { key: 'tmdb:tv:30' };
+  const seen = [];
+  const next = await resolvePick(data, review, pick, {
+    fetchers,
+    now: NOW,
+    onEntry: (entry, receivedPick) => {
+      seen.push(receivedPick);
+      return true;
+    },
+  });
+  assert.equal(next, data);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0], pick);
 });
