@@ -61,23 +61,6 @@ function mergeLibraryEntry(existing, incoming) {
   return base;
 }
 
-export function ensureEntryId(entry) {
-  if (entry && typeof entry.id === 'string' && entry.id) return entry;
-  if (entry && entry.anilistId != null) return { ...entry, id: `anilist:${entry.anilistId}` };
-  return entry;
-}
-
-export async function fetchCandidateDetail(candidate, opts = {}) {
-  const key = candidate && candidate.key;
-  if (!key) return null;
-  const fetchers = opts.fetchers || {};
-  return fetchByKey(key, {
-    tmdb: fetchers.tmdb,
-    anilist: fetchers.anilist,
-    tmdbApiKey: opts.tmdbApiKey,
-  });
-}
-
 export function resolveIntoData(data, reviewItem, catalogEntry, opts = {}) {
   const now = opts.now || new Date().toISOString();
   const built = buildLibraryEntry(reviewItem, now, opts);
@@ -110,7 +93,7 @@ export async function resolvePick(data, reviewItem, pick, opts = {}) {
     tmdbApiKey: opts.tmdbApiKey,
   });
   if (!detail) return null;
-  const entry = ensureEntryId(detail);
+  const entry = detail;
   if (typeof opts.onEntry === 'function') {
     const intercepted = opts.onEntry(entry, pick);
     if (intercepted) return data;

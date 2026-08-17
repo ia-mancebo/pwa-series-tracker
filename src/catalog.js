@@ -1,14 +1,18 @@
 import * as tmdb from './tmdb.js';
 import * as anilist from './anilist.js';
 
-const NON_NETWORK_CODES = new Set(['NOT_FOUND', 'NO_KEY', 'API']);
+export const NON_NETWORK_CODES = new Set(['NOT_FOUND', 'NO_KEY', 'API']);
+
+export function ensureEntryId(entry) {
+  if (entry && typeof entry.id === 'string' && entry.id) return entry;
+  if (entry && entry.anilistId != null) return { ...entry, id: `anilist:${entry.anilistId}` };
+  return entry;
+}
 
 export async function fetchByKey(key, deps = {}) {
   const entry = await callAdapter(key, deps);
   if (!entry) return null;
-  if (typeof entry.id === 'string' && entry.id) return entry;
-  if (entry.anilistId != null) return { ...entry, id: `anilist:${entry.anilistId}` };
-  return entry;
+  return ensureEntryId(entry);
 }
 
 async function callAdapter(key, deps) {

@@ -1,4 +1,4 @@
-import { searchAll, posterUrl, resultRowHtml } from '../search.js';
+import { searchAll, posterUrl } from '../search.js';
 import { createCache } from '../cache.js';
 import { getState } from '../store.js';
 import { isFollowed } from '../model.js';
@@ -10,12 +10,30 @@ export const SEARCH_DEBOUNCE_MS = 1000;
 const cache = createCache();
 const searchCache = createCache({ ttlMs: 7 * 24 * 60 * 60 * 1000, maxEntries: 300 });
 
-const rowHtml = resultRowHtml;
-
 function esc(text) {
   const div = document.createElement('div');
   div.textContent = text == null ? '' : String(text);
   return div.innerHTML;
+}
+
+export function resultRowHtml(result) {
+  const poster = posterUrl(result.poster);
+  const meta = [
+    result.year,
+    result.type === 'movie' ? 'película' : 'serie',
+    result.isAnime ? 'anime' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return `
+    <li class="sr-row" data-key="${esc(result.key)}">
+      <img class="sr-poster" src="${poster ? esc(poster) : ''}" alt="" loading="lazy">
+      <div class="sr-info">
+        <div class="sr-name">${esc(result.name)}</div>
+        ${result.altNames.length ? `<div class="sr-alt">${esc(result.altNames.join(' · '))}</div>` : ''}
+        <div class="sr-meta">${esc(meta)}</div>
+      </div>
+    </li>`;
 }
 
 function apiKey() {
@@ -144,7 +162,7 @@ export function mount(root, { debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
       html.push(noticeHtml('Sin resultados.'));
     } else {
       html.push('<ul class="sr-list">');
-      for (const result of results) html.push(rowHtml(result));
+      for (const result of results) html.push(resultRowHtml(result));
       html.push('</ul>');
     }
     body.innerHTML = html.join('');

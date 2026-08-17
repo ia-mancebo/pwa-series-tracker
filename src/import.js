@@ -2,7 +2,7 @@ import { episodeKey } from './model.js';
 import { normalizeName, namesMatch } from './search.js';
 import * as tmdb from './tmdb.js';
 import * as anilist from './anilist.js';
-import { fetchByKey } from './catalog.js';
+import { fetchByKey, ensureEntryId, NON_NETWORK_CODES } from './catalog.js';
 
 const SERIES_RECORDS_FILE = 'tracking-prod-records-v2.csv';
 const MOVIE_RECORDS_FILE = 'tracking-prod-records.csv';
@@ -11,7 +11,6 @@ const MOVIE_VOTES_FILE = 'ratings-live-votes.csv';
 const USER_SHOWS_FILE = 'user_tv_show_data.csv';
 
 const CJK_RE = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/;
-const NON_NETWORK_CODES = new Set(['NOT_FOUND', 'NO_KEY', 'API']);
 
 export function parseCsv(text) {
   const rows = [];
@@ -700,6 +699,7 @@ async function safeDetail(entry, opts) {
 async function fetchDetail(entry, opts) {
   const key = entryKeyOf(entry);
   if (!key || !key.startsWith('tmdb:')) return entry;
+  if (!opts.tmdbApiKey) return null;
   return fetchByKey(key, {
     tmdb: opts.fetchers.tmdb,
     anilist: opts.fetchers.anilist,
@@ -722,12 +722,6 @@ function entryKeyOf(entry) {
   if (entry && typeof entry.id === 'string' && entry.id) return entry.id;
   if (entry && entry.anilistId != null) return `anilist:${entry.anilistId}`;
   return null;
-}
-
-function ensureEntryId(entry) {
-  if (entry && typeof entry.id === 'string' && entry.id) return entry;
-  if (entry && entry.anilistId != null) return { ...entry, id: `anilist:${entry.anilistId}` };
-  return entry;
 }
 
 function yearOf(entry) {

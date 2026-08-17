@@ -1,5 +1,5 @@
-import { SEARCH_DEBOUNCE_MS } from './buscar.js';
-import { searchAll, resultRowHtml } from '../search.js';
+import { SEARCH_DEBOUNCE_MS, resultRowHtml } from './buscar.js';
+import { searchAll } from '../search.js';
 import { createCache } from '../cache.js';
 import { getState } from '../store.js';
 

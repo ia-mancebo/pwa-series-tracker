@@ -1,11 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyData, validate } from './model.js';
+import { ensureEntryId } from './catalog.js';
 import {
   buildLibraryEntry,
   discardFromReview,
-  ensureEntryId,
-  fetchCandidateDetail,
   resolvePick,
   resolveIntoData,
 } from './resolve.js';
@@ -334,20 +333,6 @@ test('descartar borra solo el pendiente elegido', () => {
   const next = discardFromReview(data, 'item-1', { now: NOW });
   assert.deepEqual(next.review.map((r) => r.id), ['item-8']);
   assert.equal(next.meta.updatedAt, NOW);
-});
-
-test('fetchCandidateDetail despacha por prefijo de clave', async () => {
-  const fetchers = makeFetchers({
-    details: [tmdbMovie(3, { name: 'Encanto' }), tmdbSeries(30, { name: 'Half Show' }), anilistEntry(19986, { name: 'Sen' })],
-  });
-  const movie = await fetchCandidateDetail({ key: 'tmdb:movie:3' }, { fetchers });
-  assert.equal(movie.id, 'tmdb:movie:3');
-  const series = await fetchCandidateDetail({ key: 'tmdb:tv:30' }, { fetchers });
-  assert.equal(series.id, 'tmdb:tv:30');
-  const anime = await fetchCandidateDetail({ key: 'anilist:19986' }, { fetchers });
-  assert.equal(anime.anilistId, 19986);
-  assert.equal(await fetchCandidateDetail({ key: 'raro:1' }, { fetchers }), null);
-  assert.equal(await fetchCandidateDetail(null, { fetchers }), null);
 });
 
 test('detalle no disponible → resolvePick devuelve null y no toca los datos', async () => {
