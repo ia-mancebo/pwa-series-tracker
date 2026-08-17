@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   DATA_FILE_NAME,
   CURRENT_VERSION,
+  FOLLOW_ACTION,
   emptyData,
   episodeKey,
   seriesState,
@@ -354,6 +355,12 @@ test('resolveFollowAction: título en biblioteca y seguido → navigate', () => 
 
 test('resolveFollowAction: título en biblioteca y no seguido → refollow', () => {
   assert.equal(resolveFollowAction({ library: { [KEY]: { followed: false } } }, KEY), 'refollow');
+});
+
+test('FOLLOW_ACTION: constantes que nombran las acciones de seguimiento', () => {
+  assert.equal(FOLLOW_ACTION.ADD, 'add');
+  assert.equal(FOLLOW_ACTION.NAVIGATE, 'navigate');
+  assert.equal(FOLLOW_ACTION.REFOLLOW, 'refollow');
 });
 
 test('addToLibrary añade catálogo y entrada vacía (para ver)', () => {

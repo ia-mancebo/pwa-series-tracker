@@ -125,8 +125,7 @@ test('clic en «Seguir» de un título fuera de la biblioteca lo añade y navega
   const { getState } = await import('../store.js');
   const state = getState();
   assert.equal(state.screen, 'detalle');
-  assert.equal(state.detailKey, 'tmdb:movie:1');
-  assert.equal(state.detailBack, 'buscar');
+  assert.deepEqual(state.detail, { key: 'tmdb:movie:1', back: 'buscar' });
   assert.ok(state.data.library['tmdb:movie:1'] !== undefined, 'se crea la entrada de biblioteca');
   assert.ok(state.data.catalog['tmdb:movie:1'] !== undefined, 'se añaden los metadatos de catálogo');
   assert.ok(!('followed' in state.data.library['tmdb:movie:1']), 'el título queda seguido');
@@ -157,7 +156,7 @@ test('título en biblioteca y seguido: el botón refleja el estado y navega sin 
   const { getState } = await import('../store.js');
   const state = getState();
   assert.equal(state.screen, 'detalle');
-  assert.equal(state.detailKey, 'tmdb:movie:1');
+  assert.deepEqual(state.detail, { key: 'tmdb:movie:1', back: 'buscar' });
   assert.deepEqual(
     state.data.library['tmdb:movie:1'],
     { watched: ['2026-01-01T10:00:00Z'] },

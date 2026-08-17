@@ -1,5 +1,5 @@
 import { getState, setState, subscribe } from '../store.js';
-import { addToLibrary } from '../model.js';
+import { follow } from '../model.js';
 import { posterUrl } from '../search.js';
 import { buildSeriesLibraryEntryFrom, voteToNote } from '../import.js';
 
@@ -100,11 +100,10 @@ export async function fetchCandidateDetail(candidate, opts = {}) {
 export function resolveIntoData(data, reviewItem, catalogEntry, opts = {}) {
   const now = opts.now || new Date().toISOString();
   const built = buildLibraryEntry(reviewItem, now);
-  let next = addToLibrary(data, catalogEntry, {});
+  let next = follow(data, catalogEntry);
   const key = catalogEntry.id;
   const existing = next.library[key];
   const merged = existing ? mergeLibraryEntry(existing, built) : built;
-  if (existing) delete merged.followed;
   next = {
     ...next,
     meta: { ...next.meta, updatedAt: now },

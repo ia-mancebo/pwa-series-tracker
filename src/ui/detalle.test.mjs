@@ -101,7 +101,7 @@ async function mountDetail(data, key = KEY) {
   const { setState } = await import('../store.js');
   const { mount } = await import('./detalle.js');
   const root = new FakeElement();
-  setState({ data, detailKey: key, screen: 'detalle' });
+  setState({ data, detail: { key, back: 'biblioteca' }, screen: 'detalle' });
   mount(root);
   return root;
 }
@@ -161,7 +161,7 @@ test('el Detalle de un título seguido muestra «Dejar de seguir» y al pulsarlo
   assert.equal(state.data.library[KEY].note, 4);
   assert.equal(root.isConnected, true);
   assert.equal(state.screen, 'detalle');
-  assert.equal(state.detailKey, KEY);
+  assert.deepEqual(state.detail, { key: KEY, back: 'biblioteca' });
   assert.ok(root.innerHTML.includes('Seguir'));
   assert.ok(!root.innerHTML.includes('Dejar de seguir'));
 });

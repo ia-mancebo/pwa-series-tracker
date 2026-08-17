@@ -1,6 +1,12 @@
 export const DATA_FILE_NAME = 'tvtime-data.json';
 export const CURRENT_VERSION = 1;
 
+export const FOLLOW_ACTION = Object.freeze({
+  ADD: 'add',
+  NAVIGATE: 'navigate',
+  REFOLLOW: 'refollow',
+});
+
 const CANONICAL_KEY = /^(tmdb:tv:\d+|tmdb:movie:\d+|anilist:\d+)$/;
 const SXE_KEY = /^\d+x\d+$/;
 const LIBRARY_FIELDS = new Set(['watched', 'episodes', 'note', 'followed', 'origin']);
@@ -199,8 +205,8 @@ export function isFollowed(libraryEntry) {
 
 export function resolveFollowAction(data, key) {
   const entry = data && data.library ? data.library[key] : undefined;
-  if (!entry) return 'add';
-  return isFollowed(entry) ? 'navigate' : 'refollow';
+  if (!entry) return FOLLOW_ACTION.ADD;
+  return isFollowed(entry) ? FOLLOW_ACTION.NAVIGATE : FOLLOW_ACTION.REFOLLOW;
 }
 
 export function setFollowed(data, key, followed) {

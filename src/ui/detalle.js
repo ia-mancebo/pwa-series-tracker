@@ -184,7 +184,7 @@ function renderAll() {
   const root = active.root;
   const state = getState();
   const data = state.data;
-  const key = state.detailKey;
+  const key = state.detail && state.detail.key;
   const catalogEntry = data && data.catalog && key ? data.catalog[key] : null;
   active.data = data;
   active.key = key;
@@ -296,7 +296,8 @@ function wire(root) {
     if (!button) return;
     const action = button.dataset.action;
     if (action === 'back') {
-      setState({ screen: getState().detailBack || 'biblioteca' });
+      const detail = getState().detail;
+      setState({ screen: (detail && detail.back) || 'biblioteca' });
     } else if (action === 'refresh') {
       const key = active.key;
       toast('Actualizando metadatos…');
@@ -347,5 +348,6 @@ export function mount(root) {
 
 subscribe(() => {
   if (!active || !active.root || !active.root.isConnected) return;
-  if (active.key !== getState().detailKey || active.data !== getState().data) renderAll();
+  const detailKey = getState().detail && getState().detail.key;
+  if (active.key !== detailKey || active.data !== getState().data) renderAll();
 });

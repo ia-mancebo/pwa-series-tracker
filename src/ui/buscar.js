@@ -1,7 +1,8 @@
 import { searchAll, posterUrl } from '../search.js';
 import { createCache } from '../cache.js';
-import { getState, setState } from '../store.js';
-import { addToLibrary, follow, isFollowed, resolveFollowAction } from '../model.js';
+import { getState } from '../store.js';
+import { isFollowed } from '../model.js';
+import { followThenOpenDetail, followLabel } from './follow.js';
 
 export const SEARCH_DEBOUNCE_MS = 1000;
 
@@ -61,7 +62,7 @@ function detailHtml(result, followed) {
           ${result.altNames.length ? `<div class="sr-alt">${esc(result.altNames.join(' · '))}</div>` : ''}
           <div class="sr-meta">${esc(meta)}</div>
           ${synopsis ? `<p class="sr-synopsis">${esc(synopsis)}</p>` : ''}
-          <button class="sr-follow" type="button" data-key="${esc(result.key)}">${followed ? 'Ver en Detalle' : 'Seguir'}</button>
+          <button class="sr-follow" type="button" data-key="${esc(result.key)}">${followLabel(followed)}</button>
         </div>
       </div>
     </section>`;
@@ -134,20 +135,11 @@ export function mount(root, { debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
         const button = event.currentTarget;
         button.disabled = true;
         try {
-          const key = button.dataset.key;
-          const state = getState();
-          if (!state.data) throw new Error('no data');
-          const action = resolveFollowAction(state.data, key);
-          if (action !== 'navigate') {
-            const detail = await fetchDetail({ key, entry: result.entry });
-            if (!detail) throw new Error('no detail');
-            const next =
-              action === 'refollow'
-                ? follow(state.data, { ...detail, id: key })
-                : addToLibrary(state.data, { ...detail, id: key });
-            setState({ data: next });
-          }
-          setState({ screen: 'detalle', detailKey: key, detailBack: 'buscar' });
+          await followThenOpenDetail({
+            key: button.dataset.key,
+            back: 'buscar',
+            fetchDetail: () => fetchDetail({ key: button.dataset.key, entry: result.entry }),
+          });
         } catch {
           button.textContent = 'Vincula tu fichero primero (Ajustes / primera apertura)';
           button.disabled = false;

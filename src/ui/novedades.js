@@ -1,5 +1,6 @@
 import { getState, setState, subscribe } from '../store.js';
-import { addToLibrary, follow, isFollowed, resolveFollowAction } from '../model.js';
+import { isFollowed } from '../model.js';
+import { followThenOpenDetail, followLabel } from './follow.js';
 import { posterUrl } from '../search.js';
 import { createCache } from '../cache.js';
 import * as tmdb from '../tmdb.js';
@@ -113,7 +114,7 @@ function detailHtml(premiere, detail, followed) {
           ${alt ? `<div class="nov-prem-alt">${esc(alt)}</div>` : ''}
           <div class="nov-prem-meta">${esc(meta)}</div>
           ${detail.synopsis ? `<p class="nov-synopsis">${esc(detail.synopsis)}</p>` : ''}
-          <button class="nov-follow" type="button" data-key="${esc(premiere.key)}">${followed ? 'Ver en Detalle' : 'Seguir'}</button>
+          <button class="nov-follow" type="button" data-key="${esc(premiere.key)}">${followLabel(followed)}</button>
         </div>
       </div>
     </section>`;
@@ -157,7 +158,7 @@ function renderBody() {
   if (episodes.length) {
     active.episodesEl.innerHTML = `<ul class="nov-list">${episodes.map(episodeRowHtml).join('')}</ul>`;
     active.episodesEl.querySelectorAll('.nov-ep').forEach((row) => {
-      const open = () => setState({ screen: 'detalle', detailKey: row.dataset.key, detailBack: 'novedades' });
+      const open = () => setState({ screen: 'detalle', detail: { key: row.dataset.key, back: 'novedades' } });
       row.addEventListener('click', open);
       row.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -236,19 +237,11 @@ function wireFollow() {
     const key = button.dataset.key;
     button.disabled = true;
     try {
-      const state = getState();
-      if (!state.data) throw new Error('no data');
-      const action = resolveFollowAction(state.data, key);
-      if (action !== 'navigate') {
-        const detail = details.get(key) || (await fetchDetail(key));
-        if (!detail) throw new Error('no detail');
-        const next =
-          action === 'refollow'
-            ? follow(state.data, { ...detail, id: key })
-            : addToLibrary(state.data, { ...detail, id: key });
-        setState({ data: next });
-      }
-      setState({ screen: 'detalle', detailKey: key, detailBack: 'novedades' });
+      await followThenOpenDetail({
+        key,
+        back: 'novedades',
+        fetchDetail: () => details.get(key) || fetchDetail(key),
+      });
     } catch {
       button.textContent = 'Vincula tu fichero primero (Ajustes / primera apertura)';
       button.disabled = false;

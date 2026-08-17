@@ -166,7 +166,7 @@ test('render() no re-monta la pantalla con cada setState: los clics no acumulan 
 
   setState({
     screen: 'detalle',
-    detailKey: key,
+    detail: { key, back: 'biblioteca' },
     data,
     saveStatus: { state: 'idle', lastSavedAt: null, dirty: true },
   });
@@ -206,9 +206,9 @@ test('dos visitas a Detalle no acumulan listeners en el contenedor compartido', 
   const saveStatus = { state: 'idle', lastSavedAt: null, dirty: true };
 
   setState({ screen: 'biblioteca', data, saveStatus });
-  setState({ screen: 'detalle', detailKey: key, data, saveStatus });
+  setState({ screen: 'detalle', detail: { key, back: 'biblioteca' }, data, saveStatus });
   setState({ screen: 'biblioteca', data, saveStatus });
-  setState({ screen: 'detalle', detailKey: key, data, saveStatus });
+  setState({ screen: 'detalle', detail: { key, back: 'biblioteca' }, data, saveStatus });
 
   assert.equal(root.listenerCount('click'), 0);
   assert.equal(root.listenerCount('change'), 0);

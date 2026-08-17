@@ -156,8 +156,7 @@ test('clic en «Seguir» de un estreno fuera de la biblioteca lo añade y navega
   const { getState } = await import('../store.js');
   const state = getState();
   assert.equal(state.screen, 'detalle');
-  assert.equal(state.detailKey, PREMIERE_KEY);
-  assert.equal(state.detailBack, 'novedades');
+  assert.deepEqual(state.detail, { key: PREMIERE_KEY, back: 'novedades' });
   assert.ok(state.data.library[PREMIERE_KEY] !== undefined, 'se crea la entrada de biblioteca');
   assert.ok(state.data.catalog[PREMIERE_KEY] !== undefined, 'se añaden los metadatos de catálogo');
   assert.ok(!('followed' in state.data.library[PREMIERE_KEY]), 'el título queda seguido');

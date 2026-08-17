@@ -231,7 +231,7 @@ function renderBody() {
 }
 
 function openDetail(key) {
-  setState({ screen: 'detalle', detailKey: key, detailBack: 'biblioteca' });
+  setState({ screen: 'detalle', detail: { key, back: 'biblioteca' } });
 }
 
 function shellHtml() {
