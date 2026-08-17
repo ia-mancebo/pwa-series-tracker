@@ -27,14 +27,31 @@ function apiKey() {
   return data && data.settings && data.settings.tmdbApiKey ? data.settings.tmdbApiKey : null;
 }
 
-export function buildLibraryEntry(reviewItem, now) {
+function rawSeasonOf(reviewItem) {
+  if (reviewItem && reviewItem.type === 'temporada' && reviewItem.raw && reviewItem.raw.season != null) {
+    return Number(reviewItem.raw.season);
+  }
+  return null;
+}
+
+function remapSxe(sxe, season) {
+  return `${season}x${String(sxe).split('x')[1]}`;
+}
+
+export function buildLibraryEntry(reviewItem, now, opts = {}) {
   const raw = reviewItem.raw || {};
   const origin = { source: 'tvtime', matchedName: reviewItem.tvtimeName, importedAt: now };
   if (raw.vote != null) origin.rawVote = raw.vote;
 
-  const sxeList = Object.keys(raw.episodes || {});
+  const season = reviewItem.type === 'temporada' && opts.season != null ? Number(opts.season) : null;
+  const remap = season == null ? (sxe) => sxe : (sxe) => remapSxe(sxe, season);
+  const episodes = {};
+  const votes = {};
+  for (const [sxe, value] of Object.entries(raw.episodes || {})) episodes[remap(sxe)] = value;
+  for (const [sxe, value] of Object.entries(raw.votes || {})) votes[remap(sxe)] = value;
+  const sxeList = Object.keys(episodes);
   if (sxeList.length) {
-    return buildSeriesLibraryEntryFrom(raw.episodes || {}, raw.votes || {}, sxeList, origin);
+    return buildSeriesLibraryEntryFrom(episodes, votes, sxeList, origin);
   }
   const entry = { origin };
   const watched = raw.watched || [];
@@ -55,7 +72,9 @@ function mergeLibraryEntry(existing, incoming) {
     for (const [sxe, ep] of Object.entries(epB)) {
       const current = episodes[sxe] || {};
       const watched = [...(current.watched || []), ...(ep.watched || [])];
-      episodes[sxe] = { ...current, ...ep, watched: [...new Set(watched)] };
+      const merged = { ...current, ...ep, watched: [...new Set(watched)] };
+      if (current.note !== undefined) merged.note = current.note;
+      episodes[sxe] = merged;
     }
     base.episodes = episodes;
   }
@@ -99,7 +118,7 @@ export async function fetchCandidateDetail(candidate, opts = {}) {
 
 export function resolveIntoData(data, reviewItem, catalogEntry, opts = {}) {
   const now = opts.now || new Date().toISOString();
-  const built = buildLibraryEntry(reviewItem, now);
+  const built = buildLibraryEntry(reviewItem, now, opts);
   let next = follow(data, catalogEntry);
   const key = catalogEntry.id;
   const existing = next.library[key];
@@ -121,7 +140,12 @@ export async function resolveCandidate(data, reviewItem, candidate, opts = {}) {
     detail = null;
   }
   if (!detail) return null;
-  return resolveIntoData(data, reviewItem, ensureEntryId(detail), { now: opts.now });
+  const entry = ensureEntryId(detail);
+  if (typeof opts.onEntry === 'function') {
+    const intercepted = opts.onEntry(entry);
+    if (intercepted) return data;
+  }
+  return resolveIntoData(data, reviewItem, entry, { now: opts.now, season: opts.season });
 }
 
 export function discardFromReview(data, reviewId, opts = {}) {
@@ -131,13 +155,17 @@ export function discardFromReview(data, reviewId, opts = {}) {
   return { ...data, meta: { ...data.meta, updatedAt: now }, review };
 }
 
+function episodeCountLabel(count) {
+  return `${count} ${count === 1 ? 'episodio' : 'episodios'}`;
+}
+
 function typeMeta(reviewItem) {
   const raw = reviewItem.raw || {};
   const parts = [];
   if (reviewItem.type === 'temporada' && raw.season != null) parts.push(`Temporada ${raw.season}`);
   else if (TYPE_LABEL[reviewItem.type]) parts.push(TYPE_LABEL[reviewItem.type]);
   const episodeCount = Object.keys(raw.episodes || {}).length;
-  if (episodeCount > 0) parts.push(`${episodeCount} ${episodeCount === 1 ? 'episodio' : 'episodios'}`);
+  if (episodeCount > 0) parts.push(episodeCountLabel(episodeCount));
   parts.push(REASON_LABEL[reviewItem.reason] || reviewItem.reason);
   return parts.join(' · ');
 }
@@ -228,9 +256,19 @@ async function choose(reviewItem, candidate, button) {
   setBusy(true);
   button.textContent = 'Cargando…';
   try {
-    const next = await resolveCandidate(data, reviewItem, candidate, { tmdbApiKey: apiKey() });
-    if (!next) throw new Error('sin detalle');
-    setState({ data: next });
+    const next = await resolveCandidate(data, reviewItem, candidate, {
+      tmdbApiKey: apiKey(),
+      now: new Date().toISOString(),
+      onEntry: (entry) => {
+        const info = seasonPickerInfo(reviewItem, entry);
+        if (!info) return false;
+        showSeasonPicker(reviewItem, candidate, entry, info, button);
+        return true;
+      },
+    });
+    if (next === null) throw new Error('sin detalle');
+    if (next !== data) setState({ data: next });
+    button.textContent = label;
   } catch {
     button.textContent = 'No se pudo cargar (sin conexión o sin clave TMDB)';
     setTimeout(() => {
@@ -245,6 +283,67 @@ function discard(reviewItem) {
   const data = getState().data;
   if (!data || busy) return;
   setState({ data: discardFromReview(data, reviewItem.id) });
+}
+
+function regularSeasonNumbers(catalogEntry) {
+  if (!catalogEntry || catalogEntry.type !== 'series' || !Array.isArray(catalogEntry.seasons)) return [];
+  const nums = catalogEntry.seasons.map((season) => Number(season.n)).filter((n) => Number.isFinite(n) && n > 0);
+  return [...new Set(nums)].sort((a, b) => a - b);
+}
+
+function seasonPickerInfo(reviewItem, entry) {
+  const rawSeason = rawSeasonOf(reviewItem);
+  if (rawSeason == null) return null;
+  const catalogSeasons = regularSeasonNumbers(entry);
+  if (!catalogSeasons.length || catalogSeasons.includes(rawSeason)) return null;
+  return { rawSeason, catalogSeasons };
+}
+
+function showSeasonPicker(reviewItem, candidate, catalogEntry, info, restoreFocus) {
+  const root = active && active.root;
+  if (!root) return;
+  const previous = root.querySelector('.cola-season-picker');
+  if (previous) previous.remove();
+  const { rawSeason, catalogSeasons } = info;
+  const episodeCount = Object.keys((reviewItem.raw && reviewItem.raw.episodes) || {}).length;
+  const previousFocus =
+    restoreFocus && typeof restoreFocus.focus === 'function' ? restoreFocus : document.activeElement;
+  const picker = document.createElement('div');
+  picker.className = 'cola-season-picker';
+  picker.innerHTML = `
+    <div class="cola-season-card">
+      <h4 class="cola-name">${esc(reviewItem.tvtimeName)}</h4>
+      <p class="cola-season-text">La temporada ${esc(String(rawSeason))} de TVTime (${episodeCountLabel(episodeCount)}) no existe en «${esc(candidate.name || candidate.key)}». ¿A qué temporada del catálogo corresponde?</p>
+      <div class="cola-season-opts">
+        ${catalogSeasons.map((n) => `<button type="button" class="aj-btn cola-season-opt" data-season="${n}">Temporada ${n}</button>`).join('')}
+      </div>
+      <div class="cola-actions">
+        <button type="button" class="aj-btn ghost cola-season-cancel">Cancelar</button>
+      </div>
+    </div>`;
+  const close = () => {
+    picker.remove();
+    if (previousFocus && typeof previousFocus.focus === 'function' && previousFocus.isConnected) {
+      previousFocus.focus();
+    }
+  };
+  picker.querySelector('.cola-season-opts').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-season]');
+    if (!button) return;
+    picker.remove();
+    const next = resolveIntoData(getState().data, reviewItem, catalogEntry, {
+      now: new Date().toISOString(),
+      season: Number(button.dataset.season),
+    });
+    setState({ data: next });
+  });
+  picker.querySelector('.cola-season-cancel').addEventListener('click', close);
+  picker.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') close();
+  });
+  root.appendChild(picker);
+  const firstOption = picker.querySelector('.cola-season-opt');
+  if (firstOption) firstOption.focus();
 }
 
 function renderAll() {

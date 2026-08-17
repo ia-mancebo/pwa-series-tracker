@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyData } from './model.js';
+import { emptyData, validate } from './model.js';
 import {
   buildLibraryEntry,
   discardFromReview,
@@ -133,6 +133,18 @@ function seriesReview(overrides = {}) {
   };
 }
 
+function seasonReview(overrides = {}) {
+  return {
+    id: 'item-3-s7',
+    tvtimeName: 'The Amazing World of Gumball',
+    type: 'temporada',
+    reason: 'temporada-sin-resolver',
+    candidates: [{ key: 'tmdb:tv:40', name: 'The Amazing World of Gumball', year: 2025, poster: null }],
+    raw: { season: 7, episodes: { '7x1': ['2026-01-09T13:46:47.000Z'] }, votes: { '7x1': 3 } },
+    ...overrides,
+  };
+}
+
 test('elegir candidato de película: catálogo + visionados + nota + origin, pendiente borrado', async () => {
   const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto', year: 2021 })] });
   const data = emptyData();
@@ -217,6 +229,92 @@ test('temporada: solo esa temporada entra, fusionando con una entrada previa', a
   assert.deepEqual(next.review, []);
 });
 
+test('temporada con remapeo: las claves SxE se re-numeran a la temporada elegida del catálogo', async () => {
+  const fetchers = makeFetchers({
+    details: [tmdbSeries(40, { name: 'Gumball 2025', seasons: [{ n: 1, episodes: [] }, { n: 2, episodes: [] }] })],
+  });
+  const review = seasonReview({
+    candidates: [{ key: 'tmdb:tv:40', name: 'The Wonderfully Weird World of Gumball', year: 2025, poster: null }],
+    raw: {
+      season: 7,
+      episodes: { '7x1': ['2026-01-09T13:46:47.000Z'], '7x22': ['2026-02-19T13:56:26.000Z'] },
+      votes: { '7x22': 29 },
+    },
+  });
+  const data = emptyData();
+  data.review = [review];
+  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
+  const entry = next.library['tmdb:tv:40'];
+  assert.deepEqual(Object.keys(entry.episodes).sort(), ['1x1', '1x22']);
+  assert.deepEqual(entry.episodes['1x1'].watched, ['2026-01-09T13:46:47.000Z']);
+  assert.equal(entry.episodes['1x22'].note, 4, 'la nota de capítulo se remapea con la clave');
+  assert.deepEqual(entry.origin.rawVotes, { '1x22': 29 });
+  assert.deepEqual(next.review, []);
+});
+
+test('US10: al fusionar un remapeo que colisiona, la nota de episodio previa se conserva y los visionados se unen', async () => {
+  const fetchers = makeFetchers({
+    details: [tmdbSeries(40, { name: 'Gumball 2025', seasons: [{ n: 1, episodes: [] }, { n: 2, episodes: [] }] })],
+  });
+  const review = {
+    id: 'item-3-s7',
+    tvtimeName: 'The Amazing World of Gumball',
+    type: 'temporada',
+    reason: 'temporada-sin-resolver',
+    candidates: [{ key: 'tmdb:tv:40', name: 'The Amazing World of Gumball', year: 2025, poster: null }],
+    raw: { season: 1, episodes: { '1x1': ['2026-01-09T13:46:47.000Z'] }, votes: { '1x1': 29 } },
+  };
+  const data = emptyData();
+  data.review = [review];
+  data.catalog['tmdb:tv:40'] = tmdbSeries(40, { name: 'Gumball 2025' });
+  data.library['tmdb:tv:40'] = {
+    episodes: { '1x1': { watched: ['2026-01-02T10:00:00.000Z'], note: 3 } },
+    origin: { source: 'tvtime', matchedName: 'The Amazing World of Gumball', importedAt: '2026-08-01T00:00:00Z' },
+  };
+  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
+  const entry = next.library['tmdb:tv:40'];
+  assert.equal(entry.episodes['1x1'].note, 3, 'la nota previa del episodio se conserva');
+  assert.deepEqual(
+    entry.episodes['1x1'].watched.slice().sort(),
+    ['2026-01-02T10:00:00.000Z', '2026-01-09T13:46:47.000Z'],
+    'los visionados se unen y deduplican'
+  );
+  assert.deepEqual(next.review, []);
+});
+
+test('US12: tras resolver una temporada con remapeo, el fichero de datos sigue validando', async () => {
+  const fetchers = makeFetchers({
+    details: [tmdbSeries(40, { name: 'Gumball 2025', seasons: [{ n: 1, episodes: [] }, { n: 2, episodes: [] }] })],
+  });
+  const review = seasonReview();
+  const data = emptyData();
+  data.review = [review];
+  const next = await resolveCandidate(data, review, review.candidates[0], { fetchers, now: NOW, season: 1 });
+  assert.equal(validate(next).ok, true);
+  assert.deepEqual(Object.keys(next.library['tmdb:tv:40'].episodes), ['1x1']);
+  assert.deepEqual(next.review, []);
+});
+
+test('buildLibraryEntry: remapeo de temporada re-numera claves y votos', () => {
+  const review = seasonReview({ candidates: [] });
+  const entry = buildLibraryEntry(review, NOW, { season: 1 });
+  assert.deepEqual(Object.keys(entry.episodes), ['1x1']);
+  assert.equal(entry.episodes['1x1'].note, 5);
+  assert.deepEqual(entry.origin.rawVotes, { '1x1': 3 });
+  assert.equal(entry.origin.matchedName, 'The Amazing World of Gumball');
+  assert.equal(entry.origin.importedAt, NOW);
+});
+
+test('buildLibraryEntry: sin season indicada, las claves SxE de la temporada se guardan tal cual', () => {
+  const review = seasonReview({
+    candidates: [],
+    raw: { season: 7, episodes: { '7x1': ['2026-01-09T13:46:47.000Z'] }, votes: {} },
+  });
+  const entry = buildLibraryEntry(review, NOW);
+  assert.deepEqual(Object.keys(entry.episodes), ['7x1']);
+  assert.deepEqual(entry.episodes['7x1'].watched, ['2026-01-09T13:46:47.000Z']);
+});
+
 test('entrada de catálogo ya existente no se sobrescribe al resolver', async () => {
   const fetchers = makeFetchers({ details: [tmdbMovie(3, { name: 'Encanto', year: 2021, poster: '/x.jpg' })] });
   const data = emptyData();
@@ -260,6 +358,42 @@ test('detalle no disponible → resolveCandidate devuelve null y no toca los dat
   const next = await resolveCandidate(data, data.review[0], data.review[0].candidates[1], { fetchers, now: NOW });
   assert.equal(next, null);
   assert.deepEqual(data.review.length, 1);
+});
+
+test('resolveCandidate: onEntry que devuelve true intercepta y no resuelve', async () => {
+  const fetchers = makeFetchers({ details: [tmdbSeries(30, { name: 'Half Show' })] });
+  const review = seriesReview({ candidates: [{ key: 'tmdb:tv:30', name: 'Half Show', year: 2020, poster: null }] });
+  const data = emptyData();
+  data.review = [review];
+  const seen = [];
+  const next = await resolveCandidate(data, review, review.candidates[0], {
+    fetchers,
+    now: NOW,
+    onEntry: (entry) => {
+      seen.push(entry);
+      return true;
+    },
+  });
+  assert.equal(next, data, 'la misma referencia de data, sin resolver');
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].id, 'tmdb:tv:30', 'el hook recibe la entrada del catálogo con id canónico');
+  assert.deepEqual(data.review.length, 1, 'el pendiente sigue en la cola');
+  assert.deepEqual(Object.keys(data.library), [], 'no se crea entrada de biblioteca');
+});
+
+test('resolveCandidate: onEntry que devuelve false deja resolver con normalidad', async () => {
+  const fetchers = makeFetchers({ details: [tmdbSeries(30, { name: 'Half Show' })] });
+  const review = seriesReview({ candidates: [{ key: 'tmdb:tv:30', name: 'Half Show', year: 2020, poster: null }] });
+  const data = emptyData();
+  data.review = [review];
+  const next = await resolveCandidate(data, review, review.candidates[0], {
+    fetchers,
+    now: NOW,
+    onEntry: () => false,
+  });
+  assert.ok(next !== data, 'resuelve igual que sin hook');
+  assert.ok(next.library['tmdb:tv:30']);
+  assert.deepEqual(next.review, []);
 });
 
 test('buildLibraryEntry: película sin visionados queda { origin } y voto no reconocido no fija nota', () => {

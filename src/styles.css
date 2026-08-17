@@ -793,6 +793,26 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   border-radius: 11px;
 }
 .cola-nocands { font-size: 12px; color: var(--muted); font-style: italic; }
+.cola-season-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 16, 28, .45);
+}
+.cola-season-card {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 10px 30px rgba(10, 16, 28, .25);
+}
+.cola-season-text { font-size: 13px; color: var(--ink); line-height: 1.5; margin: 8px 0 14px; }
+.cola-season-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .det { display: flex; flex-direction: column; gap: 14px; height: 100%; }
 .det-top {
