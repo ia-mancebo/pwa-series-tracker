@@ -239,6 +239,25 @@ test('snippet real de tracking-prod-records-v2.csv: 14 filas, follows, rewatch y
   assert.equal(gf.follow, true);
 });
 
+test('buildItems no depende del orden de los ficheros: los votos se adjuntan aunque ratings venga antes que tracking', async () => {
+  const votes = await parseTvtimeFile(
+    EPISODE_VOTES_HEADER +
+      '88612808,4344077-88612808-29,4344077,,Gravity Falls,1,5\n' +
+      '88612808,4344078-88612808-3,4344078,,Gravity Falls,1,6\n',
+    'ratings-3-prod-episode_votes.csv'
+  );
+  const tracking = await parseTvtimeFile(
+    V2_HEADER +
+      '4344077,2026-06-27 09:43:50,watch-episode-1782553430,88612808,watch-episode-gf,259972,5,1,1500,,,,2026-06-27 09:43:50,,,,,,,,,true,,,,Gravity Falls,1,5\n',
+    'tracking-prod-records-v2.csv'
+  );
+  const items = buildItems([votes, tracking]);
+  const gf = items.find((i) => i.name === 'Gravity Falls');
+  assert.ok(gf, 'el item de la serie existe');
+  assert.deepEqual(Object.keys(gf.episodes), ['1x5']);
+  assert.deepEqual(gf.votes, { '1x5': 29, '1x6': 3 });
+});
+
 function basicFetchers() {
   const gfSearch = tmdbEntry(1, 'series', { es: 'Gravity Falls', en: 'Gravity Falls', year: 2012 });
   const gfDetail = tmdbEntry(1, 'series', { es: 'Gravity Falls', en: 'Gravity Falls', year: 2012, seasons: [seasonGrid(1, 7)] });

@@ -175,6 +175,7 @@ export function buildItems(parsed) {
   const series = new Map();
   const movies = new Map();
   let seq = 0;
+  const pendingEpisodeVotes = [];
   const getSeriesItem = (name) => {
     if (!name) return null;
     let item = series.get(name);
@@ -226,9 +227,8 @@ export function buildItems(parsed) {
         break;
       case 'episode-votes':
         for (const v of parsedFile.votes) {
-          const item = findSeriesItem(series, v.seriesName);
-          if (!item || v.seasonN == null || v.episodeN == null) continue;
-          item.votes[episodeKey(v.seasonN, v.episodeN)] = v.value;
+          if (v.seasonN == null || v.episodeN == null) continue;
+          pendingEpisodeVotes.push(v);
         }
         break;
       case 'movie-votes':
@@ -249,6 +249,11 @@ export function buildItems(parsed) {
       default:
         break;
     }
+  }
+  for (const v of pendingEpisodeVotes) {
+    const item = findSeriesItem(series, v.seriesName);
+    if (!item) continue;
+    item.votes[episodeKey(v.seasonN, v.episodeN)] = v.value;
   }
   return [...series.values(), ...movies.values()].filter((i) => i.name);
 }
