@@ -1043,7 +1043,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .det-toast { bottom: 78px; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 380px) {
   .det-ep { flex-wrap: wrap; }
   .det-ep-body { flex: 1 1 calc(100% - 33px); }
   .det-ep-side {
