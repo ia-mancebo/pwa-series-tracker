@@ -4,6 +4,7 @@ import * as tmdb from '../tmdb.js';
 import * as anilist from '../anilist.js';
 import { loadModePreference, storeModePreference, hasFsAccessSupport } from '../fs.js';
 import { resolveMode, readModePreference } from '../mode.js';
+import { readNewsWindowDays, NEWS_WINDOW_MIN, NEWS_WINDOW_MAX, NEWS_WINDOW_DEFAULT } from '../news.js';
 import { mount as mountImportar } from './importar.js';
 import { mount as mountCola } from './cola.js';
 
@@ -32,13 +33,17 @@ function maskedSuffix(key) {
   return key.length <= 4 ? `…${key}` : `…${key.slice(-4)}`;
 }
 
-function saveKey(value) {
+function saveSetting(name, value) {
   const state = getState();
   if (!state.data) return;
-  const settings = { ...(state.data.settings || {}), tmdbApiKey: value };
+  const settings = { ...(state.data.settings || {}), [name]: value };
   setState({
     data: { ...state.data, settings, meta: { ...state.data.meta, updatedAt: new Date().toISOString() } },
   });
+}
+
+function saveKey(value) {
+  saveSetting('tmdbApiKey', value);
 }
 
 function removeKey() {
@@ -49,6 +54,52 @@ function removeKey() {
   setState({
     data: { ...state.data, settings, meta: { ...state.data.meta, updatedAt: new Date().toISOString() } },
   });
+}
+
+function wireNewsWindowArea(container) {
+  const input = container.querySelector('[data-role="news-window-input"]');
+  const save = container.querySelector('[data-role="news-window-save"]');
+  const status = container.querySelector('[data-role="news-window-status"]');
+  if (!input || !save) return;
+  const apply = () => {
+    const raw = Number.parseInt(input.value, 10);
+    if (Number.isNaN(raw)) {
+      if (status) status.textContent = `Número de días entre ${NEWS_WINDOW_MIN} y ${NEWS_WINDOW_MAX}.`;
+      input.value = String(readNewsWindowDays(getState().data));
+      return;
+    }
+    const clamped = readNewsWindowDays({ settings: { newsWindowDays: raw } });
+    saveSetting('newsWindowDays', clamped);
+    input.value = String(clamped);
+    if (status) status.textContent = `Ventana guardada: ${clamped} días.`;
+  };
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') apply();
+  });
+  save.addEventListener('click', apply);
+}
+
+function renderNewsWindowArea(container, state) {
+  const hasData = Boolean(state.data);
+  const value = readNewsWindowDays(state.data);
+  let html;
+  if (!hasData) {
+    html = `
+      <div class="aj-notice">Vincula tu fichero primero: la ventana se guarda en tu fichero único.</div>
+      <div class="aj-keyrow">
+        <input class="aj-input" type="number" min="${NEWS_WINDOW_MIN}" max="${NEWS_WINDOW_MAX}" step="1" disabled>
+        <button class="aj-btn" type="button" disabled>Guardar ventana</button>
+      </div>`;
+  } else {
+    html = `
+      <div class="aj-keyrow">
+        <input class="aj-input" type="number" min="${NEWS_WINDOW_MIN}" max="${NEWS_WINDOW_MAX}" step="1" value="${esc(value)}" data-role="news-window-input">
+        <button class="aj-btn" type="button" data-role="news-window-save">Guardar ventana</button>
+      </div>
+      <div class="mini" data-role="news-window-status">Días por defecto: ${NEWS_WINDOW_DEFAULT}.</div>`;
+  }
+  container.innerHTML = html;
+  wireNewsWindowArea(container);
 }
 
 function wireKeyArea(container) {
@@ -193,6 +244,12 @@ function render(root, state, deps = {}) {
         <div class="mini" data-role="refresh-status"></div>
       </section>
       <section class="aj-card">
+        <h3 class="aj-title">Ventana de Novedades</h3>
+        <p class="aj-text">Días máximos de antigüedad para que un capítulo de un título sin marca de agua cuente como nuevo
+        (${NEWS_WINDOW_MIN}–${NEWS_WINDOW_MAX}, por defecto ${NEWS_WINDOW_DEFAULT}). Si el título tiene marca de agua, la marca manda sobre la ventana.</p>
+        <div data-role="news-window"></div>
+      </section>
+      <section class="aj-card">
         <h3 class="aj-title">Importación</h3>
         <div data-role="import"></div>
       </section>
@@ -210,6 +267,7 @@ function render(root, state, deps = {}) {
       </section>
     </div>`;
   renderKeyArea(root.querySelector('[data-role="key"]'), state);
+  renderNewsWindowArea(root.querySelector('[data-role="news-window"]'), state);
   wireRefreshArea(root);
   wireModeArea(root, deps);
   const importHost = root.querySelector('[data-role="import"]');
@@ -284,4 +342,5 @@ subscribe(() => {
   if (next.hasData === rendered.hasData && next.hasKey === rendered.hasKey) return;
   rendered = next;
   renderKeyArea(activeRoot.querySelector('[data-role="key"]'), state);
+  renderNewsWindowArea(activeRoot.querySelector('[data-role="news-window"]'), state);
 });

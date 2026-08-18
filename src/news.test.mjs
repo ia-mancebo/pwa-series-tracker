@@ -1,7 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyData } from './model.js';
-import { computeNewEpisodes, computePremieres, groupByAnime, PREMIERE_LIMIT } from './news.js';
+import {
+  computeNewEpisodes,
+  computePremieres,
+  groupByAnime,
+  readNewsWindowDays,
+  NEWS_LIMIT,
+  NEWS_WINDOW_DEFAULT,
+  NEWS_WINDOW_MIN,
+  NEWS_WINDOW_MAX,
+  PREMIERE_LIMIT,
+} from './news.js';
 
 const NOW = new Date('2026-08-15T12:00:00Z');
 
@@ -66,19 +76,19 @@ test('capítulos nuevos: emitido tras la marca de agua → listado; antes → no
     watermark: { [key]: '2026-08-10T12:00:00Z' },
   });
   assert.deepEqual(computeNewEpisodes(data, NOW), [
-    { key, seasonN: 1, episodeN: 3, airDate: '2026-08-12', name: null },
+    { kind: 'episode', key, seasonN: 1, episodeN: 3, airDate: '2026-08-12', name: null },
   ]);
 });
 
-test('capítulos nuevos: sin marca de agua → todos los emitidos, orden desc', () => {
+test('capítulos nuevos: sin marca de agua → todos los emitidos dentro de la ventana, orden desc', () => {
   const key = 'tmdb:tv:1';
   const data = makeData({
     catalog: { [key]: seriesEntry(key, [season(1, [ep(1, '2026-08-05', 'Piloto'), ep(2, '2026-08-01')])]) },
     library: { [key]: {} },
   });
   assert.deepEqual(computeNewEpisodes(data, NOW), [
-    { key, seasonN: 1, episodeN: 1, airDate: '2026-08-05', name: 'Piloto' },
-    { key, seasonN: 1, episodeN: 2, airDate: '2026-08-01', name: null },
+    { kind: 'episode', key, seasonN: 1, episodeN: 1, airDate: '2026-08-05', name: 'Piloto' },
+    { kind: 'episode', key, seasonN: 1, episodeN: 2, airDate: '2026-08-01', name: null },
   ]);
 });
 
@@ -98,6 +108,170 @@ test('especiales (temporada 0) no entran en novedades aunque estén fuera de la 
   assert.equal(result[0].seasonN, 1);
 });
 
+test('ventana por defecto (90 días): sin marca, un capítulo más viejo que la ventana no entra', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [
+        season(1, [ep(1, '2026-05-10'), ep(2, '2026-08-10')]),
+      ]),
+    },
+    library: { [key]: {} },
+  });
+  assert.deepEqual(computeNewEpisodes(data, NOW), [
+    { kind: 'episode', key, seasonN: 1, episodeN: 2, airDate: '2026-08-10', name: null },
+  ]);
+});
+
+test('ventana configurable: data.settings.newsWindowDays acota el feed', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [
+        season(1, [ep(1, '2026-08-01'), ep(2, '2026-08-10')]),
+      ]),
+    },
+    library: { [key]: {} },
+  });
+  data.settings.newsWindowDays = 10;
+  assert.deepEqual(computeNewEpisodes(data, NOW), [
+    { kind: 'episode', key, seasonN: 1, episodeN: 2, airDate: '2026-08-10', name: null },
+  ]);
+});
+
+test('marca de agua presente manda sobre la ventana (la marca puede ser más vieja que la ventana)', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [season(1, [ep(1, '2026-03-01'), ep(2, '2026-08-10')])]),
+    },
+    library: { [key]: {} },
+    watermark: { [key]: '2026-04-01T12:00:00Z' },
+  });
+  data.settings.newsWindowDays = 10;
+  assert.deepEqual(computeNewEpisodes(data, NOW), [
+    { kind: 'episode', key, seasonN: 1, episodeN: 2, airDate: '2026-08-10', name: null },
+  ]);
+});
+
+test('agrupado: capítulos del mismo título y día y temporada se agrupan desde 2 con rango, contador y completo', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [
+        season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14'), ep(3, '2026-08-14')]),
+      ]),
+    },
+    library: { [key]: {} },
+  });
+  assert.deepEqual(computeNewEpisodes(data, NOW), [
+    { kind: 'group', key, seasonN: 1, airDate: '2026-08-14', startN: 1, endN: 3, count: 3, complete: true },
+  ]);
+});
+
+test('agrupado: un grupo parcial (no toda la temporada) no marca «completa»', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [
+        season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14'), ep(3, '2026-07-01'), ep(4, '2026-09-01')]),
+      ]),
+    },
+    library: { [key]: {} },
+  });
+  assert.deepEqual(computeNewEpisodes(data, NOW), [
+    { kind: 'group', key, seasonN: 1, airDate: '2026-08-14', startN: 1, endN: 2, count: 2, complete: false },
+    { kind: 'episode', key, seasonN: 1, episodeN: 3, airDate: '2026-07-01', name: null },
+  ]);
+});
+
+test('agrupado: un grupo que cubre todos los capítulos emitidos (con episodios futuros) marca «completa»', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [
+        season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14'), ep(3, '2026-09-01')]),
+      ]),
+    },
+    library: { [key]: {} },
+  });
+  assert.deepEqual(computeNewEpisodes(data, NOW), [
+    { kind: 'group', key, seasonN: 1, airDate: '2026-08-14', startN: 1, endN: 2, count: 2, complete: true },
+  ]);
+});
+
+test('agrupado: temporadas distintas del mismo título y día no se mezclan', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [
+        season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14')]),
+        season(2, [ep(1, '2026-08-14'), ep(2, '2026-08-14')]),
+      ]),
+    },
+    library: { [key]: {} },
+  });
+  const result = computeNewEpisodes(data, NOW);
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map((r) => r.seasonN).sort(), [1, 2]);
+});
+
+test('agrupado: títulos distintos del mismo día no se agrupan', () => {
+  const k1 = 'tmdb:tv:1';
+  const k2 = 'tmdb:tv:2';
+  const data = makeData({
+    catalog: {
+      [k1]: seriesEntry(k1, [season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14')])]),
+      [k2]: seriesEntry(k2, [season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14')])]),
+    },
+    library: { [k1]: {}, [k2]: {} },
+  });
+  const result = computeNewEpisodes(data, NOW);
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map((r) => r.kind), ['group', 'group']);
+  assert.notEqual(result[0].key, result[1].key);
+});
+
+test('agrupado: los días distintos del mismo título no se agrupan y mantienen orden desc', () => {
+  const key = 'tmdb:tv:1';
+  const data = makeData({
+    catalog: {
+      [key]: seriesEntry(key, [
+        season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14'), ep(3, '2026-08-10')]),
+      ]),
+    },
+    library: { [key]: {} },
+  });
+  assert.deepEqual(computeNewEpisodes(data, NOW), [
+    { kind: 'group', key, seasonN: 1, airDate: '2026-08-14', startN: 1, endN: 2, count: 2, complete: false },
+    { kind: 'episode', key, seasonN: 1, episodeN: 3, airDate: '2026-08-10', name: null },
+  ]);
+});
+
+test('tope de 50 filas en el feed (grupos cuentan como una)', () => {
+  const data = makeData({});
+  for (let s = 1; s <= 55; s += 1) {
+    const key = `tmdb:tv:${s}`;
+    data.catalog[key] = seriesEntry(key, [
+      season(1, [ep(1, '2026-08-14'), ep(2, '2026-08-14')]),
+    ]);
+    data.library[key] = {};
+  }
+  const result = computeNewEpisodes(data, NOW);
+  assert.equal(result.length, NEWS_LIMIT);
+});
+
+test('readNewsWindowDays: default 90, clampa 7–365 y redondea enteros', () => {
+  assert.equal(readNewsWindowDays(makeData({})), NEWS_WINDOW_DEFAULT);
+  assert.equal(readNewsWindowDays({ settings: { newsWindowDays: 30 } }), 30);
+  assert.equal(readNewsWindowDays({ settings: { newsWindowDays: 1 } }), NEWS_WINDOW_MIN);
+  assert.equal(readNewsWindowDays({ settings: { newsWindowDays: 999 } }), NEWS_WINDOW_MAX);
+  assert.equal(readNewsWindowDays({ settings: { newsWindowDays: 45.6 } }), 46);
+  assert.equal(readNewsWindowDays({ settings: {} }), NEWS_WINDOW_DEFAULT);
+  assert.equal(readNewsWindowDays({ settings: { newsWindowDays: '90' } }), NEWS_WINDOW_DEFAULT);
+  assert.equal(readNewsWindowDays(null), NEWS_WINDOW_DEFAULT);
+});
+
 test('episodios sin airDate o con fecha futura no cuentan', () => {
   const key = 'tmdb:tv:1';
   const data = makeData({
@@ -109,7 +283,7 @@ test('episodios sin airDate o con fecha futura no cuentan', () => {
     library: { [key]: {} },
   });
   assert.deepEqual(computeNewEpisodes(data, NOW), [
-    { key, seasonN: 1, episodeN: 4, airDate: '2026-08-10', name: null },
+    { kind: 'episode', key, seasonN: 1, episodeN: 4, airDate: '2026-08-10', name: null },
   ]);
 });
 

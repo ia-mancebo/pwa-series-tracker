@@ -17,6 +17,7 @@ const ESTRENO_TABS = [
 ];
 
 let active = null;
+let feedTab = 'feed';
 let estrenoTab = 'todo';
 let discoverStatus = 'idle';
 let discoverResults = [];
@@ -63,16 +64,39 @@ function emptyStateHtml() {
     </section>`;
 }
 
+function seriesName(key) {
+  const catalog = (getState().data && getState().data.catalog) || {};
+  return displayName(catalog[key]) || key;
+}
+
 function episodeRowHtml(item) {
   const label = `S${item.seasonN}E${item.episodeN}${item.name ? ` — ${item.name}` : ''}`;
   return `
     <li class="nov-ep" data-key="${esc(item.key)}" tabindex="0" role="button">
       <span class="nov-ep-main">
-        <span class="nov-ep-series">${esc(displayName((getState().data.catalog || {})[item.key]) || item.key)}</span>
+        <span class="nov-ep-series">${esc(seriesName(item.key))}</span>
         <span class="nov-ep-label">${esc(label)}</span>
       </span>
       <span class="nov-ep-date">${esc(formatDate(item.airDate) || item.airDate)}</span>
     </li>`;
+}
+
+function groupRowHtml(item) {
+  const label = item.complete
+    ? `Temporada ${item.seasonN} completa`
+    : `S${item.seasonN} E${item.startN}–E${item.endN} · ${item.count} capítulos`;
+  return `
+    <li class="nov-ep nov-ep-group" data-key="${esc(item.key)}" tabindex="0" role="button">
+      <span class="nov-ep-main">
+        <span class="nov-ep-series">${esc(seriesName(item.key))}</span>
+        <span class="nov-ep-label">${esc(label)}</span>
+      </span>
+      <span class="nov-ep-date">${esc(formatDate(item.airDate) || item.airDate)}</span>
+    </li>`;
+}
+
+function feedRowHtml(item) {
+  return item.kind === 'group' ? groupRowHtml(item) : episodeRowHtml(item);
 }
 
 function typeLabel(premiere) {
@@ -144,27 +168,24 @@ function visiblePremieres(premieres, groups) {
 function closePremiereDetail() {
   clearInlineBack();
   active.premiereKey = null;
-  renderBody();
+  renderEstrenos();
 }
 
-function renderBody() {
-  if (!active || !active.root || !active.root.isConnected) return;
-  const data = getState().data;
-  if (!data) return;
-  const now = new Date();
-  const episodes = computeNewEpisodes(data, now);
-  const premieres = computePremieres(data, discoverResults, now);
-  const groups = groupByAnime(premieres);
-
+function renderNotices() {
+  if (!active || !active.noticesEl) return;
   const notices = [];
   if (!navigator.onLine) notices.push('sin conexión — novedades computadas de los datos locales');
-  if (discoverStatus === 'stale') notices.push('sin conexión — estrenos del caché (pueden no estar al día)');
-  if (discoverStatus === 'loading') notices.push('Cargando estrenos…');
   active.noticesEl.innerHTML = notices.length ? notices.map((n) => noticeHtml(n, 'warn')).join('') : '';
+}
 
+function renderFeed() {
+  if (!active || !active.feedEl || !active.root.isConnected) return;
+  const data = getState().data;
+  if (!data) return;
+  const episodes = computeNewEpisodes(data, new Date());
   if (episodes.length) {
-    active.episodesEl.innerHTML = `<ul class="nov-list">${episodes.map(episodeRowHtml).join('')}</ul>`;
-    active.episodesEl.querySelectorAll('.nov-ep').forEach((row) => {
+    active.feedEl.innerHTML = `<ul class="nov-list">${episodes.map(feedRowHtml).join('')}</ul>`;
+    active.feedEl.querySelectorAll('.nov-ep').forEach((row) => {
       const open = () => openDetail({ key: row.dataset.key, back: 'novedades' });
       row.addEventListener('click', open);
       row.addEventListener('keydown', (event) => {
@@ -175,15 +196,29 @@ function renderBody() {
       });
     });
   } else {
-    active.episodesEl.innerHTML = '<div class="nov-empty">Sin capítulos nuevos fuera de la marca de agua.</div>';
+    active.feedEl.innerHTML = '<div class="nov-empty">Sin capítulos nuevos fuera de la marca de agua y de la ventana de Novedades.</div>';
   }
+}
+
+function renderEstrenos() {
+  if (!active || !active.premieresEl || !active.root.isConnected) return;
+  const data = getState().data;
+  if (!data) return;
+  const now = new Date();
+  const premieres = computePremieres(data, discoverResults, now);
+  const groups = groupByAnime(premieres);
+
+  const statusNotices = [];
+  if (discoverStatus === 'stale') statusNotices.push(noticeHtml('sin conexión — estrenos del caché (pueden no estar al día)', 'warn'));
+  if (discoverStatus === 'loading') statusNotices.push(noticeHtml('Cargando estrenos…'));
+  if (active.estrenosStatusEl) active.estrenosStatusEl.innerHTML = statusNotices.join('');
 
   if (discoverStatus === 'no-key') {
     active.premieresEl.innerHTML = noticeHtml('Sin clave de TMDB — solo AniList. Los estrenos solo están disponibles con una clave TMDB (Ajustes).', 'warn');
     return;
   }
   if (discoverStatus === 'error') {
-    active.premieresEl.innerHTML = noticeHtml('No se pudieron cargar los estrenos. Revisa tu conexión o la clave TMDB, o pulsa Actualizar novedades.');
+    active.premieresEl.innerHTML = noticeHtml('No se pudieron cargar los estrenos. Revisa tu conexión o la clave TMDB, o pulsa Actualizar estrenos.');
     return;
   }
   const visible = visiblePremieres(premieres, groups);
@@ -212,12 +247,12 @@ function renderBody() {
       active.premiereKey = row.dataset.key;
       pushHistory();
       setInlineBack(closePremiereDetail);
-      renderBody();
+      renderEstrenos();
       if (!details.has(active.premiereKey)) {
         fetchDetail(active.premiereKey)
           .then((detail) => {
             if (detail) details.set(active.premiereKey, detail);
-            renderBody();
+            renderEstrenos();
           })
           .catch(() => {
             if (active && active.premieresEl && active.premiereKey) {
@@ -264,25 +299,39 @@ function updateTabs(root) {
 function shellHtml() {
   return `
     <div class="nov">
-      <div class="nov-top">
-        <button type="button" class="det-btn" data-action="refresh">Actualizar novedades</button>
+      <div class="lib-seg nov-tabs" data-role="tabs">
+        <button type="button" class="${feedTab === 'feed' ? 'act' : ''}" data-tab="feed">Novedades de lo que sigo</button>
+        <button type="button" class="${feedTab === 'estrenos' ? 'act' : ''}" data-tab="estrenos">Estrenos de lo que no sigo</button>
       </div>
       <div class="nov-notices" data-role="notices"></div>
-      <section class="nov-group">
-        <h3 class="nov-title">Capítulos nuevos de lo que sigues</h3>
-        <div data-role="episodes"></div>
-      </section>
-      <section class="nov-group">
-        <h3 class="nov-title">Estrenos</h3>
+      <div class="nov-pane" data-role="pane-feed">
+        <div data-role="feed"></div>
+      </div>
+      <div class="nov-pane" data-role="pane-estrenos"${feedTab === 'estrenos' ? '' : ' hidden'}>
+        <div class="nov-top">
+          <button type="button" class="det-btn" data-action="refresh">Actualizar estrenos</button>
+        </div>
         <div class="lib-seg" data-role="seg">
           ${ESTRENO_TABS.map(
             ([value, label]) =>
               `<button type="button" class="${estrenoTab === value ? 'act' : ''}" data-tab="${value}">${label}</button>`
           ).join('')}
         </div>
+        <div class="nov-notices" data-role="estrenos-status"></div>
         <div data-role="premieres"></div>
-      </section>
+      </div>
     </div>`;
+}
+
+function applyFeedTab() {
+  if (!active || !active.root || !active.root.isConnected) return;
+  const feed = active.root.querySelector('[data-role="pane-feed"]');
+  const estrenos = active.root.querySelector('[data-role="pane-estrenos"]');
+  if (feed) feed.hidden = feedTab !== 'feed';
+  if (estrenos) estrenos.hidden = feedTab !== 'estrenos';
+  active.root.querySelectorAll('[data-role="tabs"] button').forEach((button) => {
+    button.classList.toggle('act', button.dataset.tab === feedTab);
+  });
 }
 
 async function loadCachedPremieres() {
@@ -311,17 +360,17 @@ async function fetchPremieres(force = false) {
   if (!key) {
     discoverStatus = 'no-key';
     discoverResults = [];
-    renderBody();
+    renderEstrenos();
     return;
   }
   if (!navigator.onLine) {
     await loadCachedPremieres();
-    renderBody();
+    renderEstrenos();
     return;
   }
   if (!force && (discoverStatus === 'ok' || discoverStatus === 'stale' || discoverStatus === 'loading')) return;
   discoverStatus = 'loading';
-  renderBody();
+  renderEstrenos();
   fetchPromise = (async () => {
     try {
       const [series, seriesAnime, movies, moviesAnime] = await Promise.all([
@@ -341,7 +390,7 @@ async function fetchPremieres(force = false) {
       await loadCachedPremieres();
     } finally {
       fetchPromise = null;
-      renderBody();
+      renderEstrenos();
     }
   })();
   return fetchPromise;
@@ -363,14 +412,21 @@ function renderAll() {
   }
   root.innerHTML = shellHtml();
   active.noticesEl = root.querySelector('[data-role="notices"]');
-  active.episodesEl = root.querySelector('[data-role="episodes"]');
+  active.feedEl = root.querySelector('[data-role="feed"]');
+  active.estrenosStatusEl = root.querySelector('[data-role="estrenos-status"]');
   active.premieresEl = root.querySelector('[data-role="premieres"]');
+  root.querySelector('[data-role="tabs"]').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-tab]');
+    if (!button) return;
+    feedTab = button.dataset.tab;
+    applyFeedTab();
+  });
   root.querySelector('[data-role="seg"]').addEventListener('click', (event) => {
     const button = event.target.closest('button[data-tab]');
     if (!button) return;
     estrenoTab = button.dataset.tab;
     updateTabs(root);
-    renderBody();
+    renderEstrenos();
   });
   root.querySelector('[data-action="refresh"]').addEventListener('click', async (event) => {
     const button = event.currentTarget;
@@ -378,13 +434,17 @@ function renderAll() {
     button.textContent = 'Actualizando…';
     await fetchPremieres(true);
     button.disabled = false;
-    button.textContent = 'Actualizar novedades';
+    button.textContent = 'Actualizar estrenos';
   });
-  renderBody();
+  renderNotices();
+  renderFeed();
+  renderEstrenos();
+  applyFeedTab();
   void fetchPremieres();
 }
 
 export function mount(root) {
+  feedTab = 'feed';
   active = { root, hasData: Boolean(getState().data) };
   renderAll();
   return root;
@@ -396,13 +456,19 @@ subscribe(() => {
     renderAll();
     return;
   }
-  if (!active.episodesEl || !active.root.contains(active.episodesEl)) return;
-  renderBody();
+  if (!active.feedEl || !active.root.contains(active.feedEl)) return;
+  renderNotices();
+  renderFeed();
+  renderEstrenos();
 });
 
 window.addEventListener('online', () => {
   if (active && active.root && active.root.isConnected && active.hasData) void fetchPremieres(true);
 });
 window.addEventListener('offline', () => {
-  if (active && active.root && active.root.isConnected) renderBody();
+  if (active && active.root && active.root.isConnected) {
+    renderNotices();
+    renderFeed();
+    renderEstrenos();
+  }
 });
