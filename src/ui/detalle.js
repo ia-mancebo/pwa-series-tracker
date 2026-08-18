@@ -15,6 +15,7 @@ import {
   unfollow,
 } from '../model.js';
 import { posterUrl } from '../search.js';
+import { goBack } from '../nav.js';
 
 const STATE_LABEL = { paraver: 'Para ver', viendo: 'Viendo', visto: 'Visto' };
 
@@ -296,8 +297,7 @@ function wire(root) {
     if (!button) return;
     const action = button.dataset.action;
     if (action === 'back') {
-      const detail = getState().detail;
-      setState({ screen: (detail && detail.back) || 'biblioteca' });
+      goBack();
     } else if (action === 'refresh') {
       const key = active.key;
       toast('Actualizando metadatos…');

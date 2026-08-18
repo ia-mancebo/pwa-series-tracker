@@ -1,6 +1,7 @@
 import { getState, setState, subscribe } from '../store.js';
 import { seriesState, movieState, episodeKey, isFollowed } from '../model.js';
 import { posterUrl, normalizeName } from '../search.js';
+import { openDetail } from '../nav.js';
 
 const STATE_LABEL = { paraver: 'Para ver', viendo: 'Viendo', visto: 'Visto' };
 const STATE_ORDER = { viendo: 0, paraver: 1, visto: 2 };
@@ -220,18 +221,18 @@ function renderBody() {
       </div>`;
   }
   body.querySelectorAll('.lib-row, .lib-tr').forEach((element) => {
-    element.addEventListener('click', () => openDetail(element.dataset.key));
+    element.addEventListener('click', () => openTitle(element.dataset.key));
     element.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        openDetail(element.dataset.key);
+        openTitle(element.dataset.key);
       }
     });
   });
 }
 
-function openDetail(key) {
-  setState({ screen: 'detalle', detail: { key, back: 'biblioteca' } });
+function openTitle(key) {
+  openDetail({ key, back: 'biblioteca' });
 }
 
 function shellHtml() {

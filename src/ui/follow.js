@@ -1,5 +1,6 @@
 import { getState, setState } from '../store.js';
 import { FOLLOW_ACTION, addToLibrary, follow, resolveFollowAction } from '../model.js';
+import { openDetail } from '../nav.js';
 
 const FOLLOW_MUTATORS = {
   [FOLLOW_ACTION.ADD]: addToLibrary,
@@ -20,5 +21,5 @@ export async function followThenOpenDetail({ key, fetchDetail, back }) {
     const next = FOLLOW_MUTATORS[action](state.data, { ...detail, id: key });
     setState({ data: next });
   }
-  setState({ screen: 'detalle', detail: { key, back } });
+  openDetail({ key, back });
 }

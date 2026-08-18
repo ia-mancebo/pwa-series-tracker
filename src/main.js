@@ -6,6 +6,7 @@ import { createSaveFlow } from './save.js';
 import { resolveMode, readModePreference, shouldResetDirtyAtBoot } from './mode.js';
 import { refreshLibrary, refreshOne } from './refresh.js';
 import { precacheLibraryPosters } from './precache.js';
+import { installBackNavigation, onScreenChange } from './nav.js';
 import * as tmdb from './tmdb.js';
 import * as anilist from './anilist.js';
 import { mount as mountBiblioteca } from './ui/biblioteca.js';
@@ -160,6 +161,7 @@ function render() {
   if (screen === mountedScreen) return;
 
   mountedScreen = screen;
+  onScreenChange(screen);
   const root = document.getElementById('screen-content');
   root.replaceChildren();
   const host = document.createElement('div');
@@ -192,6 +194,7 @@ async function setup() {
   const retryButton = document.getElementById('save-retry-btn');
   if (retryButton) retryButton.addEventListener('click', () => sync.saveNow(true));
 
+  installBackNavigation();
   await applyModeUI();
   setSaveStatus('Sin fichero vinculado');
   window.addEventListener('online', updateOnlineIndicator);

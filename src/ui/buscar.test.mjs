@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+let buscarSeq = 0;
+function freshBuscar() {
+  return import(`./buscar.js?module=${++buscarSeq}`);
+}
+
 class FakeElement {
   constructor(tag = 'div') {
     this.tag = tag;
@@ -108,7 +113,7 @@ async function openSearchDetail(input, row) {
 }
 
 test('clic en «Seguir» de un título fuera de la biblioteca lo añade y navega a Detalle', async () => {
-  const { mount } = await import('./buscar.js');
+  const { mount } = await freshBuscar();
   const { root, input, body, follow } = buildRoot();
   await setup();
   globalThis.__rows = [rowElement('tmdb:movie:1')];
@@ -132,7 +137,7 @@ test('clic en «Seguir» de un título fuera de la biblioteca lo añade y navega
 });
 
 test('título en biblioteca y seguido: el botón refleja el estado y navega sin duplicar', async () => {
-  const { mount } = await import('./buscar.js');
+  const { mount } = await freshBuscar();
   const { setState } = await import('../store.js');
   const { root, input, body, follow } = buildRoot();
   await setup();
@@ -165,7 +170,7 @@ test('título en biblioteca y seguido: el botón refleja el estado y navega sin 
 });
 
 test('título en biblioteca y no seguido: «Seguir» lo re-sigue conservando historial y navega', async () => {
-  const { mount } = await import('./buscar.js');
+  const { mount } = await freshBuscar();
   const { setState } = await import('../store.js');
   const { root, input, body, follow } = buildRoot();
   await setup();
@@ -195,7 +200,7 @@ test('título en biblioteca y no seguido: «Seguir» lo re-sigue conservando his
 });
 
 test('escribir seguido dispara una única búsqueda tras el debounce', async () => {
-  const { mount } = await import('./buscar.js');
+  const { mount } = await freshBuscar();
   const { root, input, body } = buildRoot();
   await setup();
   mount(root, { debounceMs: 30 });
@@ -212,7 +217,7 @@ test('escribir seguido dispara una única búsqueda tras el debounce', async () 
 });
 
 test('abrir un detalle no lo cierra una búsqueda pendiente del input', async () => {
-  const { mount } = await import('./buscar.js');
+  const { mount } = await freshBuscar();
   const { root, input, body } = buildRoot();
   await setup();
   globalThis.__rows = [rowElement('tmdb:movie:1')];
@@ -237,8 +242,28 @@ test('abrir un detalle no lo cierra una búsqueda pendiente del input', async ()
   );
 });
 
+test('remontar Buscar tras volver del Detalle restaura la búsqueda anterior', async () => {
+  const { mount } = await freshBuscar();
+  const first = buildRoot();
+  await setup();
+  globalThis.__rows = [rowElement('tmdb:movie:1')];
+  mount(first.root, { debounceMs: 30 });
+
+  first.input.value = 'peli';
+  first.input.dispatch('input', {});
+  await sleep(60);
+  assert.ok(first.body.innerHTML.includes('sr-row'), 'resultados visibles antes de navegar');
+
+  const second = buildRoot();
+  mount(second.root, { debounceMs: 30 });
+  await sleep(60);
+
+  assert.equal(second.input.value, 'peli', 'el input conserva la consulta al remontar');
+  assert.ok(second.body.innerHTML.includes('sr-row'), 'los resultados se restauran al remontar');
+});
+
 test('una búsqueda obsoleta que tarda más no pisa el detalle abierto', async () => {
-  const { mount } = await import('./buscar.js');
+  const { mount } = await freshBuscar();
   const { root, input, body } = buildRoot();
   await setup({ delays: { uno: 80 } });
   globalThis.__rows = [rowElement('tmdb:movie:1')];

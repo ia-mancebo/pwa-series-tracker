@@ -4,11 +4,13 @@ import { getState } from '../store.js';
 import { isFollowed } from '../model.js';
 import { followThenOpenDetail, followLabel } from './follow.js';
 import { fetchByKey } from '../catalog.js';
+import { pushHistory, setInlineBack, clearInlineBack, goBack } from '../nav.js';
 
 export const SEARCH_DEBOUNCE_MS = 1000;
 
 const cache = createCache();
 const searchCache = createCache({ ttlMs: 7 * 24 * 60 * 60 * 1000, maxEntries: 300 });
+let lastQuery = '';
 
 function esc(text) {
   const div = document.createElement('div');
@@ -94,7 +96,6 @@ export function mount(root, { debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
 
   const input = root.querySelector('.sr-input');
   const body = root.querySelector('[data-role="body"]');
-  let lastQuery = '';
   let timer = null;
   let searchSeq = 0;
 
@@ -104,14 +105,21 @@ export function mount(root, { debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
     searchSeq += 1;
   }
 
+  function closeDetail() {
+    clearInlineBack();
+    runSearch(lastQuery);
+  }
+
   function showDetail(result) {
     cancelPendingSearch();
+    pushHistory();
+    setInlineBack(closeDetail);
     const stateData = getState().data;
     const library = stateData && stateData.library ? stateData.library : {};
     body.innerHTML = detailHtml(result, isFollowed(library[result.key]));
     body
       .querySelector('.sr-back')
-      .addEventListener('click', () => runSearch(lastQuery));
+      .addEventListener('click', goBack);
     body
       .querySelector('.sr-follow')
       .addEventListener('click', async (event) => {
@@ -131,6 +139,7 @@ export function mount(root, { debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
   }
 
   async function runSearch(query) {
+    clearInlineBack();
     const trimmed = query.trim();
     const seq = ++searchSeq;
     if (!trimmed) {
@@ -196,6 +205,9 @@ export function mount(root, { debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
       runSearch(input.value);
     }
   });
+
+  input.value = lastQuery;
+  if (lastQuery) runSearch(lastQuery);
 
   return root;
 }

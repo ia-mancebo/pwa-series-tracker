@@ -5,6 +5,7 @@ import { posterUrl } from '../search.js';
 import { createCache } from '../cache.js';
 import * as tmdb from '../tmdb.js';
 import { computeNewEpisodes, computePremieres, groupByAnime } from '../news.js';
+import { openDetail, pushHistory, setInlineBack, clearInlineBack, goBack } from '../nav.js';
 
 const cache = createCache();
 const PREMIERES_CACHE_KEY = 'news-premieres';
@@ -140,6 +141,12 @@ function visiblePremieres(premieres, groups) {
   return premieres;
 }
 
+function closePremiereDetail() {
+  clearInlineBack();
+  active.premiereKey = null;
+  renderBody();
+}
+
 function renderBody() {
   if (!active || !active.root || !active.root.isConnected) return;
   const data = getState().data;
@@ -158,7 +165,7 @@ function renderBody() {
   if (episodes.length) {
     active.episodesEl.innerHTML = `<ul class="nov-list">${episodes.map(episodeRowHtml).join('')}</ul>`;
     active.episodesEl.querySelectorAll('.nov-ep').forEach((row) => {
-      const open = () => setState({ screen: 'detalle', detail: { key: row.dataset.key, back: 'novedades' } });
+      const open = () => openDetail({ key: row.dataset.key, back: 'novedades' });
       row.addEventListener('click', open);
       row.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -189,10 +196,7 @@ function renderBody() {
         const premiere = premieres.find((p) => p.key === active.premiereKey);
         const library = data && data.library ? data.library : {};
         active.premieresEl.innerHTML = detailHtml(premiere, detail, isFollowed(library[premiere.key]));
-        active.premieresEl.querySelector('[data-action="detail-back"]').addEventListener('click', () => {
-          active.premiereKey = null;
-          renderBody();
-        });
+        active.premieresEl.querySelector('[data-action="detail-back"]').addEventListener('click', goBack);
         wireFollow();
       }
       return;
@@ -206,6 +210,8 @@ function renderBody() {
   active.premieresEl.querySelectorAll('.nov-prem').forEach((row) => {
     const open = () => {
       active.premiereKey = row.dataset.key;
+      pushHistory();
+      setInlineBack(closePremiereDetail);
       renderBody();
       if (!details.has(active.premiereKey)) {
         fetchDetail(active.premiereKey)
