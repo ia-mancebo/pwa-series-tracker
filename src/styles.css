@@ -1005,7 +1005,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .det-ep-name { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
 .det-ep-meta { display: block; font: 10px var(--mono); color: var(--muted); margin-top: 2px; }
-.det-ep-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.det-ep-side { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; }
 .det-ep .det-star { min-width: 28px; min-height: 28px; font-size: 18px; }
 .det-date {
   padding: 3px 6px;
@@ -1014,6 +1014,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   background: var(--panel);
   color: var(--ink);
   font-size: 11px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .det-toast {
   position: fixed;
@@ -1043,7 +1045,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .det-toast { bottom: 78px; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 380px) {
   .det-ep { flex-wrap: wrap; }
   .det-ep-body { flex: 1 1 calc(100% - 33px); }
   .det-ep-side {
