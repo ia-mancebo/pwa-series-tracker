@@ -1,5 +1,5 @@
 import { getState, setState, subscribe } from '../store.js';
-import { seriesState, movieState, episodeKey, isFollowed } from '../model.js';
+import { seriesState, movieState, episodeKey, nextEpisode, isFollowed } from '../model.js';
 import { posterUrl, normalizeName } from '../search.js';
 import { openDetail } from '../nav.js';
 
@@ -134,6 +134,12 @@ function stateChipHtml(state) {
   return `<span class="lib-chip lib-chip--${state}">${STATE_LABEL[state]}</span>`;
 }
 
+function nextEpisodeText(row, now) {
+  const next = nextEpisode(row.libraryEntry, row.catalogEntry, now);
+  if (!next) return null;
+  return next.name ? `Siguiente: ${next.sxe} · ${next.name}` : `Siguiente: ${next.sxe}`;
+}
+
 function thumbHtml(catalogEntry) {
   const url = posterUrl(catalogEntry && catalogEntry.poster, 'w92');
   if (url) return `<img class="lib-thumb-img" src="${esc(url)}" alt="" loading="lazy">`;
@@ -142,9 +148,10 @@ function thumbHtml(catalogEntry) {
   return `<span class="lib-thumb-fallback ${anime ? 'lib-thumb-fallback--anime' : ''}">${esc(initial)}</span>`;
 }
 
-function rowHtml(row, now) {
+export function rowHtml(row, now) {
   const name = displayName(row.catalogEntry) || row.key;
   const alt = altNames(row.catalogEntry);
+  const nextText = nextEpisodeText(row, now);
   return `
     <li class="lib-row" data-key="${esc(row.key)}" tabindex="0" role="button">
       <span class="lib-thumb">${thumbHtml(row.catalogEntry)}</span>
@@ -152,23 +159,26 @@ function rowHtml(row, now) {
         <span class="lib-name">${esc(name)}</span>
         ${alt ? `<span class="lib-alt">${esc(alt)}</span>` : ''}
         <span class="lib-progress">${esc(progressText(row, now))}</span>
+        ${nextText ? `<span class="lib-next">${esc(nextText)}</span>` : ''}
       </span>
       ${stateChipHtml(row.state)}
     </li>`;
 }
 
-function tableRowHtml(row, now) {
+export function tableRowHtml(row, now) {
   const name = displayName(row.catalogEntry) || row.key;
   const alt = altNames(row.catalogEntry);
   const year = yearOf(row.catalogEntry);
   const sub = [alt, year].filter(Boolean).join(' · ');
   const note = row.libraryEntry && row.libraryEntry.note;
+  const nextText = nextEpisodeText(row, now);
   return `
     <tr class="lib-tr" data-key="${esc(row.key)}" tabindex="0" role="button">
       <td class="lib-td-thumb"><span class="lib-thumb lib-thumb--small">${thumbHtml(row.catalogEntry)}</span></td>
       <td class="lib-col-title">
         <span class="lib-title-main">${esc(name)}</span>
         ${sub ? `<span class="lib-title-sub">${esc(sub)}</span>` : ''}
+        ${nextText ? `<span class="lib-title-next">${esc(nextText)}</span>` : ''}
       </td>
       <td class="lib-td lib-col-type">${esc(typeLabel(row.catalogEntry))}</td>
       <td class="lib-td lib-col-state">${stateChipHtml(row.state)}</td>

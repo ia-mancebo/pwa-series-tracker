@@ -576,6 +576,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   margin-top: 2px;
 }
 .lib-progress { font: 10px var(--mono); color: var(--muted); margin-top: 4px; }
+.lib-next { font: 10px var(--mono); color: var(--muted); margin-top: 4px; }
 .lib-empty {
   padding: 22px 14px;
   text-align: center;
@@ -630,6 +631,16 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   text-overflow: ellipsis;
 }
 .lib-title-sub {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font: 10px var(--mono);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-title-next {
   display: block;
   margin-top: 3px;
   color: var(--muted);

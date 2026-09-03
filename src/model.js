@@ -69,6 +69,24 @@ export function seasonState(libraryEntry, season, now = new Date()) {
   return 'paraver';
 }
 
+export function nextEpisode(libraryEntry, catalogEntry, now = new Date()) {
+  if (!catalogEntry || catalogEntry.type !== 'series') return null;
+  const episodes = libraryEntry && libraryEntry.episodes ? libraryEntry.episodes : {};
+  const seasons = [...(catalogEntry.seasons || [])].sort((a, b) => Number(a.n) - Number(b.n));
+  for (const season of seasons) {
+    if (Number(season.n) === 0) continue;
+    const seasonEpisodes = [...(season.episodes || [])].sort((a, b) => Number(a.n) - Number(b.n));
+    for (const ep of seasonEpisodes) {
+      if (!isAired(ep, now)) continue;
+      const sxe = episodeKey(season.n, ep.n);
+      const marks = episodes[sxe];
+      if (marks && Array.isArray(marks.watched) && marks.watched.length > 0) continue;
+      return { sxe, name: ep.name == null ? null : ep.name };
+    }
+  }
+  return null;
+}
+
 export function movieState(libraryEntry) {
   if (libraryEntry && Array.isArray(libraryEntry.watched) && libraryEntry.watched.length > 0) return 'visto';
   return 'paraver';

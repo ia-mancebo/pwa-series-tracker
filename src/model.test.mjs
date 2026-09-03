@@ -12,6 +12,7 @@ import {
   episodeKey,
   seriesState,
   seasonState,
+  nextEpisode,
   movieState,
   rewatchCount,
   toggleEpisodeWatched,
@@ -178,6 +179,89 @@ test('sin catálogo la serie se trata como paraver', () => {
   const data = baseSeries();
   assert.equal(seriesState(data.library[KEY], undefined, NOW), 'paraver');
   assert.equal(seriesState(data.library[KEY], { type: 'movie' }, NOW), 'paraver');
+});
+
+test('nextEpisode: serie sin empezar devuelve el primer capítulo emitido', () => {
+  const data = baseSeries();
+  assert.deepEqual(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), { sxe: '1x1', name: 'Cap 1' });
+});
+
+test('nextEpisode: salta los vistos y devuelve el siguiente pendiente', () => {
+  let data = toggleEpisodeWatched(baseSeries(), KEY, '1x1', '2025-01-01T10:00:00Z');
+  assert.deepEqual(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), { sxe: '1x2', name: 'Cap 2' });
+});
+
+test('nextEpisode: salta la temporada 0 de especiales', () => {
+  let data = baseSeries();
+  data = toggleEpisodeWatched(data, KEY, '0x1', '2025-01-01T10:00:00Z');
+  data = toggleEpisodeWatched(data, KEY, '0x2', '2025-01-02T10:00:00Z');
+  assert.deepEqual(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), { sxe: '1x1', name: 'Cap 1' });
+});
+
+test('nextEpisode: no considera capítulos no emitidos', () => {
+  const data = baseSeries();
+  data.catalog[KEY].seasons = [
+    { n: 1, episodes: [
+      { n: 1, name: 'Emitido', airDate: '2020-01-01' },
+      { n: 2, name: 'Futuro', airDate: '2027-01-01' },
+    ] },
+  ];
+  const partial = toggleEpisodeWatched(data, KEY, '1x1', '2025-01-01T10:00:00Z');
+  assert.equal(nextEpisode(partial.library[KEY], partial.catalog[KEY], NOW), null);
+});
+
+test('nextEpisode: todo lo emitido visto pero con episodios futuros → null', () => {
+  const data = watchedSeries();
+  assert.equal(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), null);
+});
+
+test('nextEpisode: serie totalmente vista → null', () => {
+  let data = baseSeries();
+  data.catalog[KEY].seasons = [
+    { n: 1, episodes: [
+      { n: 1, name: 'Cap 1', airDate: '2020-03-01' },
+      { n: 2, name: 'Cap 2', airDate: '2020-04-01' },
+    ] },
+  ];
+  data = toggleEpisodeWatched(data, KEY, '1x1', '2025-01-01T10:00:00Z');
+  data = toggleEpisodeWatched(data, KEY, '1x2', '2025-01-02T10:00:00Z');
+  assert.equal(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), null);
+});
+
+test('nextEpisode: película → null', () => {
+  const data = baseSeries();
+  const movie = { type: 'movie', isAnime: false, names: { es: 'Película' } };
+  assert.equal(nextEpisode(data.library[KEY], movie, NOW), null);
+});
+
+test('nextEpisode: sin catalogEntry → null', () => {
+  const data = baseSeries();
+  assert.equal(nextEpisode(data.library[KEY], undefined, NOW), null);
+  assert.equal(nextEpisode(data.library[KEY], null, NOW), null);
+});
+
+test('nextEpisode: capítulo sin nombre devuelve name null', () => {
+  const data = baseSeries();
+  data.catalog[KEY].seasons = [{ n: 1, episodes: [{ n: 1, name: null, airDate: '2020-03-01' }] }];
+  assert.deepEqual(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), { sxe: '1x1', name: null });
+});
+
+test('nextEpisode: recorre temporadas y capítulos por n ascendente', () => {
+  const data = baseSeries();
+  data.catalog[KEY].seasons = [
+    { n: 2, episodes: [{ n: 1, name: 'T2E1', airDate: '2020-01-01' }] },
+    { n: 1, episodes: [
+      { n: 2, name: 'T1E2', airDate: '2020-01-01' },
+      { n: 1, name: 'T1E1', airDate: '2020-01-01' },
+    ] },
+  ];
+  assert.deepEqual(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), { sxe: '1x1', name: 'T1E1' });
+});
+
+test('nextEpisode: sin temporadas ni episodios → null', () => {
+  const data = baseSeries();
+  data.catalog[KEY].seasons = [];
+  assert.equal(nextEpisode(data.library[KEY], data.catalog[KEY], NOW), null);
 });
 
 test('seasonState deriva por temporada, incluida la 0', () => {
