@@ -37,6 +37,8 @@ export function createSync(options = {}) {
 
   let timer = null;
   let saving = false;
+  let pending = false;
+  let pendingForce = false;
 
   function status(next, extra = {}) {
     const current = store.getState().saveStatus || {};
@@ -96,7 +98,6 @@ export function createSync(options = {}) {
   }
 
   async function saveNow(force = false) {
-    if (saving) return;
     const state = store.getState();
     const data = state.data;
     if (!data) return;
@@ -107,6 +108,11 @@ export function createSync(options = {}) {
     }
     const dirty = state.saveStatus && state.saveStatus.dirty === true;
     if (!force && !dirty) return;
+    if (saving) {
+      pending = true;
+      if (force) pendingForce = true;
+      return;
+    }
     saving = true;
     cancelPending();
     status('saving', { dirty: true });
@@ -119,8 +125,9 @@ export function createSync(options = {}) {
         status('error', { dirty: true });
         return;
       }
+      const latest = store.getState().data;
       const diskUpdated = disk.data.meta.updatedAt;
-      const localUpdated = data.meta.updatedAt;
+      const localUpdated = latest.meta.updatedAt;
       if (diskUpdated > localUpdated && dirty) {
         const choice = await dialog({
           diskUpdatedAt: diskUpdated,
@@ -140,18 +147,30 @@ export function createSync(options = {}) {
         await adoptDisk(disk.data);
         return;
       }
-      await fsApi.saveBackup(data);
-      await fsApi.writeFile(handle, data);
-      await fsApi.saveToOpfs(data);
-      status('saved', { dirty: false, lastSavedAt: Date.now() });
-      onStatus(`Guardado ✓ ${timeLabel(data.meta.updatedAt)}`, 'sync');
+      const toWrite = store.getState().data;
+      await fsApi.saveBackup(toWrite);
+      await fsApi.writeFile(handle, toWrite);
+      await fsApi.saveToOpfs(toWrite);
+      if (store.getState().data === toWrite) {
+        pending = false;
+        pendingForce = false;
+        status('saved', { dirty: false, lastSavedAt: Date.now() });
+        onStatus(`Guardado ✓ ${timeLabel(toWrite.meta.updatedAt)}`, 'sync');
+      } else {
+        status('dirty', { dirty: true });
+        pending = true;
+      }
     } catch (err) {
       if (err && err.name === 'SaveNeedsGestureError') {
+        pending = false;
+        pendingForce = false;
         status('dirty', { dirty: true });
         onStatus('Pulsa Guardar para permitir la escritura', 'offline');
         return;
       }
       if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+        pending = false;
+        pendingForce = false;
         status('error', { dirty: true });
         onStatus('Permiso caducado: pulsa Reintentar', 'offline');
         return;
@@ -160,14 +179,27 @@ export function createSync(options = {}) {
       try {
         await fsApi.writeFile(handle, current);
         await fsApi.saveToOpfs(current);
-        status('saved', { dirty: false, lastSavedAt: Date.now() });
-        onStatus(`Guardado ✓ ${timeLabel(current.meta.updatedAt)}`, 'sync');
+        if (store.getState().data === current) {
+          pending = false;
+          pendingForce = false;
+          status('saved', { dirty: false, lastSavedAt: Date.now() });
+          onStatus(`Guardado ✓ ${timeLabel(current.meta.updatedAt)}`, 'sync');
+        } else {
+          status('dirty', { dirty: true });
+          pending = true;
+        }
       } catch {
         status('error', { dirty: true });
         onStatus('Error al guardar', 'offline');
       }
     } finally {
       saving = false;
+      if (pending) {
+        pending = false;
+        const nextForce = pendingForce;
+        pendingForce = false;
+        void saveNow(nextForce);
+      }
     }
   }
 

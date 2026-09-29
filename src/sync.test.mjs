@@ -6,14 +6,16 @@ function iso(offsetMs) {
   return new Date(Date.now() + (offsetMs || 0)).toISOString();
 }
 
-function makeFs({ diskData = null, failWrites = 0 } = {}) {
+function makeFs({ diskData = null, failWrites = 0, readDelayMs = 0 } = {}) {
   let disk = diskData ? JSON.parse(JSON.stringify(diskData)) : null;
   const calls = [];
   return {
     calls,
+    getDisk: () => (disk ? JSON.parse(JSON.stringify(disk)) : null),
     getMode: () => 'fsaccess',
     async readFile() {
       calls.push('readFile');
+      if (readDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, readDelayMs));
       if (!disk) return { ok: false, data: null, text: null, error: 'CORRUPT' };
       return { ok: true, data: JSON.parse(JSON.stringify(disk)), text: '', error: null };
     },
@@ -234,4 +236,63 @@ test('relectura al volver a visible: disco más nuevo sin dirty adopta', async (
   const sync = createSync({ fsApi, store });
   await sync.onVisible();
   assert.equal(store.state.data.meta.updatedAt, diskData.meta.updatedAt);
+});
+
+const T_BASE = '2020-01-01T00:00:05.000Z';
+const T_A = '2020-01-01T00:00:10.000Z';
+const T_B = '2020-01-01T00:00:20.000Z';
+const T_C = '2020-01-01T00:00:30.000Z';
+
+test('guardado en vuelo: un cambio durante la escritura no se pierde', async () => {
+  const dataA = baseData(T_A);
+  const dataB = baseData(T_B);
+  const fsApi = makeFs({ diskData: baseData(T_BASE), readDelayMs: 30 });
+  const store = makeStore({ data: dataA, handle: {} });
+  const sync = createSync({ fsApi, store, debounceMs: 20 });
+  sync.markDirty();
+  await tick(25);
+  assert.ok(fsApi.calls.includes('readFile'));
+  assert.equal(fsApi.calls.includes('writeFile'), false);
+  store.setState({ data: dataB });
+  sync.markDirty();
+  await tick(300);
+  assert.deepEqual(fsApi.getDisk(), dataB);
+  assert.equal(store.state.saveStatus.dirty, false);
+  assert.equal(store.state.saveStatus.state, 'saved');
+});
+
+test('guardado en vuelo: onHidden durante la escritura persiste el último estado', async () => {
+  const dataA = baseData(T_A);
+  const dataB = baseData(T_B);
+  const fsApi = makeFs({ diskData: baseData(T_BASE), readDelayMs: 30 });
+  const store = makeStore({ data: dataA, handle: {} });
+  const sync = createSync({ fsApi, store, debounceMs: 20 });
+  sync.markDirty();
+  await tick(25);
+  assert.ok(fsApi.calls.includes('readFile'));
+  assert.equal(fsApi.calls.includes('writeFile'), false);
+  store.setState({ data: dataB });
+  sync.onHidden();
+  await tick(300);
+  assert.deepEqual(fsApi.getDisk(), dataB);
+});
+
+test('varios taps antes del primer guardado persisten el último estado', async () => {
+  const dataA = baseData(T_A);
+  const dataB = baseData(T_B);
+  const dataC = baseData(T_C);
+  const fsApi = makeFs({ diskData: baseData(T_BASE) });
+  const store = makeStore({ data: dataA, handle: {} });
+  const sync = createSync({ fsApi, store, debounceMs: 20 });
+  sync.markDirty();
+  await tick(5);
+  store.setState({ data: dataB });
+  sync.markDirty();
+  await tick(5);
+  store.setState({ data: dataC });
+  sync.markDirty();
+  await tick(100);
+  assert.deepEqual(fsApi.getDisk(), dataC);
+  assert.equal(store.state.saveStatus.dirty, false);
+  assert.equal(store.state.saveStatus.state, 'saved');
 });
